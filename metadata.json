@@ -1,0 +1,6 @@
+{
+  "name": "Church Multimedia System",
+  "description": "Professional church presentation system modularized for Android controllers and external displays.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
