@@ -48,30 +48,34 @@ fun CameraPreview(
     AndroidView(
         factory = { ctx ->
             val previewView = PreviewView(ctx)
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
-            cameraProviderFuture.addListener({
-                try {
-                    val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    val cameraSelector = if (useFrontCamera) {
-                        CameraSelector.DEFAULT_FRONT_CAMERA
-                    } else {
-                        CameraSelector.DEFAULT_BACK_CAMERA
-                    }
+                cameraProviderFuture.addListener({
+                    try {
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = Preview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
+                        val cameraSelector = if (useFrontCamera) {
+                            CameraSelector.DEFAULT_FRONT_CAMERA
+                        } else {
+                            CameraSelector.DEFAULT_BACK_CAMERA
+                        }
 
-                    cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview
-                    )
-                } catch (e: Exception) {
-                    cameraStateMessage = "Camera Error / Permission Required: ${e.localizedMessage}"
-                }
-            }, ContextCompat.getMainExecutor(ctx))
+                        cameraProvider.unbindAll()
+                        cameraProvider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview
+                        )
+                    } catch (e: Throwable) {
+                        cameraStateMessage = "Camera Error / Permission Required: ${e.localizedMessage}"
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
+            } catch (e: Throwable) {
+                cameraStateMessage = "Camera Init Error: ${e.localizedMessage}"
+            }
 
             previewView
         },

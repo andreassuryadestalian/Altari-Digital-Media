@@ -1,5 +1,6 @@
 package com.example.presentation
 
+import android.content.Context
 import com.example.features.lyrics.LyricsStylePreset
 import com.example.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -7,9 +8,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class PresentationServer : PresentationEngine {
+class PresentationServer(val context: Context? = null) : PresentationEngine {
     private val _state = MutableStateFlow(PresentationState())
     override val state: StateFlow<PresentationState> = _state.asStateFlow()
+    val webServer = com.example.server.PresentationWebServer(this)
+
+    init {
+        webServer.start(context)
+    }
 
     override fun go(content: PresentationContent) {
         val newStatus = when (content) {
@@ -145,7 +151,37 @@ class PresentationServer : PresentationEngine {
     }
 
     fun setStylePreset(preset: LyricsStylePreset) {
-        _state.update { it.copy(stylePreset = preset) }
+        _state.update {
+            it.copy(
+                stylePreset = preset,
+                fontSizeSp = preset.fontSize.value.toInt(),
+                isTextBold = preset.fontWeight == androidx.compose.ui.text.font.FontWeight.Bold || preset.fontWeight == androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                textColorRgb = preset.textColor.value.toLong(),
+                textPosition = if (preset.isLowerThird) TextDisplayPosition.LOWER_THIRD else TextDisplayPosition.CENTER
+            )
+        }
+    }
+
+    fun updateLiveTextSettings(
+        fontSizeSp: Int = _state.value.fontSizeSp,
+        textPosition: TextDisplayPosition = _state.value.textPosition,
+        textColorRgb: Long = _state.value.textColorRgb,
+        textAlignment: TextAlignmentOption = _state.value.textAlignment,
+        textBackgroundAlpha: Float = _state.value.textBackgroundAlpha,
+        isTextBold: Boolean = _state.value.isTextBold,
+        isTextShadowEnabled: Boolean = _state.value.isTextShadowEnabled
+    ) {
+        _state.update {
+            it.copy(
+                fontSizeSp = fontSizeSp,
+                textPosition = textPosition,
+                textColorRgb = textColorRgb,
+                textAlignment = textAlignment,
+                textBackgroundAlpha = textBackgroundAlpha,
+                isTextBold = isTextBold,
+                isTextShadowEnabled = isTextShadowEnabled
+            )
+        }
     }
 
     fun toggleVideoPlayback() {

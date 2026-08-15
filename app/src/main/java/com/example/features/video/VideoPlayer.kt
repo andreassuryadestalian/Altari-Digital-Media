@@ -137,78 +137,100 @@ fun IpCameraStreamPlayer(
         key(formattedUrl, retryCount) {
             AndroidView(
                 factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.apply {
-                            javaScriptEnabled = true
-                            domStorageEnabled = true
-                            loadWithOverviewMode = true
-                            useWideViewPort = true
-                            allowContentAccess = true
-                            allowFileAccess = true
-                            mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            mediaPlaybackRequiresUserGesture = false
-                        }
-                        setBackgroundColor(android.graphics.Color.BLACK)
-
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                hasError = false
+                    try {
+                        WebView(ctx).apply {
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                loadWithOverviewMode = true
+                                useWideViewPort = true
+                                allowContentAccess = true
+                                allowFileAccess = true
+                                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                mediaPlaybackRequiresUserGesture = false
                             }
+                            setBackgroundColor(android.graphics.Color.BLACK)
 
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                isLoading = false
-                            }
+                            webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                    hasError = false
+                                }
 
-                            override fun onReceivedError(
-                                view: WebView?,
-                                request: WebResourceRequest?,
-                                error: WebResourceError?
-                            ) {
-                                if (request?.isForMainFrame == true) {
-                                    hasError = true
+                                override fun onPageFinished(view: WebView?, url: String?) {
                                     isLoading = false
                                 }
+
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    error: WebResourceError?
+                                ) {
+                                    if (request?.isForMainFrame == true) {
+                                        hasError = true
+                                        isLoading = false
+                                    }
+                                }
                             }
+
+                            val targetUrl = if (formattedUrl.contains("/mjpegfeed") || formattedUrl.contains("/video")) {
+                                formattedUrl
+                            } else {
+                                if (formattedUrl.endsWith("/")) "${formattedUrl}video" else "$formattedUrl/video"
+                            }
+
+                            val htmlContent = """
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                                <style>
+                                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                                    html, body {
+                                        width: 100%; height: 100%;
+                                        background-color: #000;
+                                        display: flex; align-items: center; justify-content: center;
+                                        overflow: hidden;
+                                    }
+                                    img {
+                                        width: 100%; height: 100%;
+                                        object-fit: cover;
+                                        display: block;
+                                    }
+                                </style>
+                                </head>
+                                <body>
+                                    <img src="$targetUrl" onerror="this.onerror=null; this.src='$formattedUrl';" />
+                                </body>
+                                </html>
+                            """.trimIndent()
+
+                            loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+                            webViewInstance = this
                         }
-
-                        val targetUrl = if (formattedUrl.contains("/mjpegfeed") || formattedUrl.contains("/video")) {
-                            formattedUrl
-                        } else {
-                            if (formattedUrl.endsWith("/")) "${formattedUrl}video" else "$formattedUrl/video"
+                    } catch (e: Throwable) {
+                        android.util.Log.e("IpCameraStreamPlayer", "Error initializing WebView", e)
+                        hasError = true
+                        isLoading = false
+                        android.widget.TextView(ctx).apply {
+                            text = "WebView tidak tersedia: ${e.localizedMessage}"
+                            setTextColor(android.graphics.Color.RED)
                         }
-
-                        val htmlContent = """
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                            <style>
-                                * { margin: 0; padding: 0; box-sizing: border-box; }
-                                html, body {
-                                    width: 100%; height: 100%;
-                                    background-color: #000;
-                                    display: flex; align-items: center; justify-content: center;
-                                    overflow: hidden;
-                                }
-                                img {
-                                    width: 100%; height: 100%;
-                                    object-fit: cover;
-                                    display: block;
-                                }
-                            </style>
-                            </head>
-                            <body>
-                                <img src="$targetUrl" onerror="this.onerror=null; this.src='$formattedUrl';" />
-                            </body>
-                            </html>
-                        """.trimIndent()
-
-                        loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
-                        webViewInstance = this
                     }
                 },
-                update = { webView ->
-                    webViewInstance = webView
+                onRelease = { view ->
+                    try {
+                        if (view is WebView) {
+                            view.stopLoading()
+                            view.destroy()
+                        }
+                    } catch (e: Throwable) {
+                        e.printStackTrace()
+                    }
+                },
+                update = { view ->
+                    if (view is WebView) {
+                        webViewInstance = view
+                    }
                 },
                 modifier = Modifier.fillMaxSize()
             )

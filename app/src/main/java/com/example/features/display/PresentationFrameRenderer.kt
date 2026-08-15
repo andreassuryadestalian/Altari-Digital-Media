@@ -106,56 +106,115 @@ fun PresentationFrameRenderer(
         // LAYER 2: Overlay / Main Content (If not CLEAR)
         if (state.status != PresentationStatus.CLEAR) {
             val content = state.currentContent
+
+            val effectivePosition = if (profileType == DisplayProfileType.LOWER_THIRD) {
+                com.example.presentation.TextDisplayPosition.LOWER_THIRD
+            } else {
+                state.textPosition
+            }
+
+            val liveTextStyle = androidx.compose.ui.text.TextStyle(
+                color = Color(state.textColorRgb),
+                fontSize = state.fontSizeSp.sp,
+                fontWeight = if (state.isTextBold) FontWeight.Bold else FontWeight.Normal,
+                fontFamily = state.stylePreset.fontFamily,
+                textAlign = state.textAlignment.value,
+                lineHeight = (state.fontSizeSp * 1.3f).sp,
+                shadow = if (state.isTextShadowEnabled) {
+                    androidx.compose.ui.graphics.Shadow(
+                        color = Color.Black,
+                        offset = androidx.compose.ui.geometry.Offset(2f, 2f),
+                        blurRadius = 4f
+                    )
+                } else null
+            )
+
             when (content) {
                 is LyricsContent -> {
                     val slides = content.slides
                     if (slides.isNotEmpty()) {
                         val index = state.currentSlideIndex.coerceIn(0, slides.size - 1)
                         val slideText = slides[index]
-                        val preset = state.stylePreset
 
-                        if (preset.isLowerThird || profileType == DisplayProfileType.LOWER_THIRD) {
-                            // Lower Third Layout
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.BottomStart
-                            ) {
+                        when (effectivePosition) {
+                            com.example.presentation.TextDisplayPosition.LOWER_THIRD -> {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
-                                        .padding(16.dp)
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.BottomStart
                                 ) {
-                                    Text(
-                                        text = slideText,
-                                        color = preset.textColor,
-                                        fontSize = preset.fontSize,
-                                        fontWeight = preset.fontWeight,
-                                        fontFamily = preset.fontFamily,
-                                        textAlign = preset.textAlign
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.6f)), RoundedCornerShape(8.dp))
+                                            .padding(16.dp)
+                                    ) {
+                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
                                 }
                             }
-                        } else {
-                            // Full Screen Lyrics Centered Layout
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(alpha = 0.35f))
-                                    .padding(24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = slideText,
-                                    color = preset.textColor,
-                                    fontSize = preset.fontSize,
-                                    fontWeight = preset.fontWeight,
-                                    fontFamily = preset.fontFamily,
-                                    textAlign = preset.textAlign,
-                                    lineHeight = (preset.fontSize.value * 1.3f).sp
-                                )
+                            com.example.presentation.TextDisplayPosition.BOTTOM_CENTER -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.5f)), RoundedCornerShape(8.dp))
+                                            .padding(16.dp)
+                                    ) {
+                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
+                            com.example.presentation.TextDisplayPosition.TOP_BANNER -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.5f)), RoundedCornerShape(8.dp))
+                                            .padding(16.dp)
+                                    ) {
+                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
+                            com.example.presentation.TextDisplayPosition.LEFT_CENTER -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(20.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.85f)
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha), RoundedCornerShape(8.dp))
+                                            .padding(20.dp)
+                                    ) {
+                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
+                            com.example.presentation.TextDisplayPosition.CENTER -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = state.textBackgroundAlpha))
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = slideText, style = liveTextStyle)
+                                }
                             }
                         }
                     }
@@ -165,40 +224,97 @@ fun PresentationFrameRenderer(
                     if (verses.isNotEmpty()) {
                         val index = state.currentSlideIndex.coerceIn(0, verses.size - 1)
                         val verseText = verses[index]
-                        val preset = state.stylePreset
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.45f))
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
+                        when (effectivePosition) {
+                            com.example.presentation.TextDisplayPosition.LOWER_THIRD,
+                            com.example.presentation.TextDisplayPosition.BOTTOM_CENTER -> {
                                 Box(
                                     modifier = Modifier
-                                        .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.BottomCenter
                                 ) {
-                                    Text(
-                                        text = content.title,
-                                        color = Color(0xFF381E72),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.65f)), RoundedCornerShape(8.dp))
+                                            .padding(14.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = content.title,
+                                                color = Color(0xFF381E72),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(text = verseText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
                                 }
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    text = verseText,
-                                    color = Color.White,
-                                    fontSize = 28.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Center,
-                                    lineHeight = 38.sp
-                                )
+                            }
+                            com.example.presentation.TextDisplayPosition.TOP_BANNER -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.65f)), RoundedCornerShape(8.dp))
+                                            .padding(14.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = content.title,
+                                                color = Color(0xFF381E72),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(text = verseText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
+                            else -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color.Black.copy(alpha = state.textBackgroundAlpha))
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Text(
+                                                text = content.title,
+                                                color = Color(0xFF381E72),
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(text = verseText, style = liveTextStyle)
+                                    }
+                                }
                             }
                         }
                     }

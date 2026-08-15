@@ -67,33 +67,41 @@ class DisplayRenderer(
     }
 
     fun connectDisplay(display: Display, profileType: DisplayProfileType = DisplayProfileType.MAIN_PROJECTOR) {
+        if (display.displayId == Display.DEFAULT_DISPLAY) {
+            Log.w("DisplayRenderer", "Cannot launch Presentation on DEFAULT_DISPLAY")
+            return
+        }
         disconnectDisplay(display.displayId)
         displayProfiles[display.displayId] = profileType
 
-        val presentation = object : Presentation(context, display) {
-            override fun onCreate(savedInstanceState: Bundle?) {
-                super.onCreate(savedInstanceState)
-                val composeView = ComposeView(context).apply {
-                    layoutParams = ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    setContent {
-                        val state by presentationStateFlow.collectAsState()
-                        PresentationFrameRenderer(
-                            state = state,
-                            profileType = profileType
-                        )
+        try {
+            val presentation = object : Presentation(context, display) {
+                override fun onCreate(savedInstanceState: Bundle?) {
+                    super.onCreate(savedInstanceState)
+                    try {
+                        val composeView = ComposeView(context).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            setContent {
+                                val state by presentationStateFlow.collectAsState()
+                                PresentationFrameRenderer(
+                                    state = state,
+                                    profileType = profileType
+                                )
+                            }
+                        }
+                        setContentView(composeView)
+                    } catch (e: Throwable) {
+                        Log.e("DisplayRenderer", "Error inside Presentation onCreate", e)
                     }
                 }
-                setContentView(composeView)
             }
-        }
 
-        try {
             presentation.show()
             activePresentations[display.displayId] = presentation
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("DisplayRenderer", "Failed to launch presentation on display ${display.displayId}", e)
         }
     }
