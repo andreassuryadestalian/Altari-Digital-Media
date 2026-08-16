@@ -41,6 +41,8 @@ import com.example.presentation.BackgroundType
 import com.example.presentation.PresentationServer
 import com.example.presentation.PresentationState
 import com.example.presentation.PresentationStatus
+import com.example.features.lyrics.LyricsStylePreset
+import com.example.server.getLocalIpAddress
 
 // Theme colors
 val BgMain = Color(0xFF1C1B1F)
@@ -76,20 +78,17 @@ fun DashboardScreen(server: PresentationServer) {
     var previewContent by remember { mutableStateOf<PresentationContent?>(null) }
     var previewSlideIndex by remember { mutableStateOf(0) }
 
-    // Library items state
+    // Library items state initialized from server single source of truth
     val songsLibrary = remember {
-        mutableStateListOf<LyricsContent>(
-            LyricsContent("1", "Engkau Baik (Worship)", listOf("Verse 1\nKu datang ke hadirat-Mu\nDengan hati penuh syukur", "Chorus\nEngkau baik\nSelamanya baik")),
-            LyricsContent("2", "Amazing Grace", listOf("Verse 1\nAmazing grace, how sweet the sound\nThat saved a wretch like me", "Verse 2\nI once was lost, but now am found\nWas blind, but now I see")),
-            LyricsContent("3", "How Great Thou Art", listOf("Verse 1\nO Lord my God, when I in awesome wonder\nConsider all the worlds Thy hands have made", "Chorus\nThen sings my soul, my Savior God, to Thee\nHow great Thou art, how great Thou art"))
-        )
+        mutableStateListOf<LyricsContent>().apply {
+            addAll(server.songsLibrary)
+        }
     }
 
     val mediaLibrary = remember {
-        mutableStateListOf<PresentationContent>(
-            IpCameraContent("droid1", "DroidCam HP (Local Wi-Fi)", "http://192.168.1.50:4747/video"),
-            CameraContent("cam1", "Live Camera 1", "0")
-        )
+        mutableStateListOf<PresentationContent>().apply {
+            addAll(server.mediaLibrary)
+        }
     }
 
     val pptLibrary = remember {
@@ -101,17 +100,17 @@ fun DashboardScreen(server: PresentationServer) {
             ServicePlaylist(
                 id = "p1",
                 name = "Ibadah Minggu Pagi",
-                items = mutableStateListOf(
-                    songsLibrary[0],
-                    songsLibrary[1]
-                )
+                items = mutableStateListOf<PresentationContent>().apply {
+                    if (songsLibrary.isNotEmpty()) add(songsLibrary[0])
+                    if (songsLibrary.size > 1) add(songsLibrary[1])
+                }
             ),
             ServicePlaylist(
                 id = "p2",
                 name = "Ibadah Pemuda / Youth",
-                items = mutableStateListOf(
-                    songsLibrary[2]
-                )
+                items = mutableStateListOf<PresentationContent>().apply {
+                    if (songsLibrary.size > 2) add(songsLibrary[2])
+                }
             ),
             ServicePlaylist(
                 id = "p3",
@@ -123,7 +122,6 @@ fun DashboardScreen(server: PresentationServer) {
 
     var activePlaylistId by remember { mutableStateOf("p1") }
     val activePlaylist = playlists.find { it.id == activePlaylistId } ?: playlists.firstOrNull()
-    val activePlaylistItems = activePlaylist?.items ?: emptyList()
 
     var showDroidCamDialog by remember { mutableStateOf(false) }
 
@@ -132,14 +130,25 @@ fun DashboardScreen(server: PresentationServer) {
             onDismiss = { showDroidCamDialog = false },
             onAdd = { newMedia ->
                 mediaLibrary.add(newMedia)
+                server.mediaLibrary.add(newMedia)
             }
         )
     }
 
-    // Default preview item
+    // Default preview item initialization
     LaunchedEffect(Unit) {
         if (previewContent == null && songsLibrary.isNotEmpty()) {
             previewContent = songsLibrary[0]
+        }
+    }
+
+    // Synchronize preview selection with live state when live presentation changes
+    LaunchedEffect(presentationState.currentContent, presentationState.currentSlideIndex) {
+        val currentLive = presentationState.currentContent
+        if (currentLive != null) {
+            if (previewContent?.id == currentLive.id) {
+                previewSlideIndex = presentationState.currentSlideIndex
+            }
         }
     }
 
@@ -149,6 +158,7 @@ fun DashboardScreen(server: PresentationServer) {
             .background(BgMain)
     ) {
         TopBar(
+            server = server,
             selectedTab = selectedTab,
             onTabSelected = { selectedTab = it },
             playlists = playlists,
@@ -213,8 +223,14 @@ fun DashboardScreen(server: PresentationServer) {
                     songsList = songsLibrary,
                     onAddSong = { newSong ->
                         val index = songsLibrary.indexOfFirst { it.id == newSong.id }
-                        if (index >= 0) songsLibrary[index] = newSong
-                        else songsLibrary.add(newSong)
+                        if (index >= 0) {
+                            songsLibrary[index] = newSong
+                            val sIdx = server.songsLibrary.indexOfFirst { it.id == newSong.id }
+                            if (sIdx >= 0) server.songsLibrary[sIdx] = newSong else server.songsLibrary.add(newSong)
+                        } else {
+                            songsLibrary.add(newSong)
+                            server.songsLibrary.add(newSong)
+                        }
                     },
                     onSelectForPreview = {
                         previewContent = it
@@ -222,6 +238,8 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onSelectForGo = {
+                        previewContent = it
+                        previewSlideIndex = 0
                         server.go(it)
                         selectedTab = NavigationTab.DASHBOARD
                     },
@@ -238,6 +256,8 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onSelectForGo = {
+                        previewContent = it
+                        previewSlideIndex = 0
                         server.go(it)
                         selectedTab = NavigationTab.DASHBOARD
                     },
@@ -256,6 +276,8 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onSelectForGo = {
+                        previewContent = it
+                        previewSlideIndex = 0
                         server.go(it)
                         selectedTab = NavigationTab.DASHBOARD
                     }
@@ -264,9 +286,13 @@ fun DashboardScreen(server: PresentationServer) {
             NavigationTab.MEDIA -> {
                 MediaManagementScreen(
                     mediaList = mediaLibrary,
-                    onAddMedia = { mediaLibrary.add(it) },
+                    onAddMedia = {
+                        mediaLibrary.add(it)
+                        server.mediaLibrary.add(it)
+                    },
                     onDeleteMedia = { item ->
                         mediaLibrary.remove(item)
+                        server.mediaLibrary.remove(item)
                         if (previewContent?.id == item.id) {
                             previewContent = null
                         }
@@ -276,6 +302,7 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onSelectForGo = {
+                        previewContent = it
                         server.go(it)
                         selectedTab = NavigationTab.DASHBOARD
                     },
@@ -320,9 +347,12 @@ fun DashboardScreen(server: PresentationServer) {
                     },
                     onSelectForPreview = {
                         previewContent = it
+                        previewSlideIndex = 0
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onSelectForGo = {
+                        previewContent = it
+                        previewSlideIndex = 0
                         server.go(it)
                         selectedTab = NavigationTab.DASHBOARD
                     }
@@ -346,6 +376,7 @@ fun DashboardScreen(server: PresentationServer) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
+    server: PresentationServer,
     selectedTab: NavigationTab,
     onTabSelected: (NavigationTab) -> Unit,
     playlists: List<ServicePlaylist>,
@@ -354,6 +385,8 @@ fun TopBar(
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
     val activePlaylist = playlists.find { it.id == activePlaylistId } ?: playlists.firstOrNull()
+    val localIp = remember(server) { getLocalIpAddress(server.context) }
+    val port = server.webServer.activePort
 
     Column(
         modifier = Modifier
@@ -364,7 +397,7 @@ fun TopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -376,8 +409,8 @@ fun TopBar(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
-                    Text("CHURCH PRESENTATION SYSTEM", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Text("PROCASTER SERVER: 192.168.1.20:8080", color = EmeraldLight, fontSize = 10.sp)
+                    Text("CHURCH PRESENTATION SYSTEM", color = TextMain, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("LIVE WEB: http://$localIp:$port | REMOTE: /remote", color = EmeraldLight, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 

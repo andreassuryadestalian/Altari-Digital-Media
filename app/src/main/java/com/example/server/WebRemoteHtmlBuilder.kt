@@ -19,13 +19,13 @@ object WebRemoteHtmlBuilder {
             flex-direction: column;
             user-select: none;
             -webkit-user-select: none;
-            padding-bottom: 74px; /* Space for fixed bottom bar */
+            padding-bottom: 76px; /* Ruang untuk fixed bottom control bar */
         }
 
         /* Top Header */
         header {
             background-color: #131B2E;
-            padding: 10px 16px;
+            padding: 8px 16px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -42,19 +42,20 @@ object WebRemoteHtmlBuilder {
         }
 
         .brand h1 {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
             color: #FFFFFF;
             letter-spacing: 0.5px;
         }
 
         .brand-sub {
-            font-size: 10px;
-            color: #94A3B8;
-            font-weight: 600;
-            background: #1E293B;
+            font-size: 9px;
+            color: #38BDF8;
+            font-weight: 800;
+            background: rgba(56, 189, 248, 0.15);
             padding: 2px 6px;
             border-radius: 4px;
+            border: 1px solid rgba(56, 189, 248, 0.3);
         }
 
         .status-pill {
@@ -94,89 +95,61 @@ object WebRemoteHtmlBuilder {
             gap: 4px;
         }
 
-        /* Navigation Tab Bar */
-        .tab-bar {
-            background: #0F172A;
-            display: flex;
-            overflow-x: auto;
-            border-bottom: 1px solid #1E293B;
-            scrollbar-width: none;
-            position: sticky;
-            top: 48px;
-            z-index: 90;
-        }
-        .tab-bar::-webkit-scrollbar { display: none; }
-
-        .tab-btn {
-            flex: 1;
-            min-width: 78px;
-            padding: 10px 8px;
-            text-align: center;
-            background: transparent;
-            border: none;
-            color: #94A3B8;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.15s;
-            white-space: nowrap;
-        }
-        .tab-btn.active {
-            color: #38BDF8;
-            border-bottom-color: #38BDF8;
-            background: rgba(56, 189, 248, 0.08);
-        }
-
         /* Main Container */
         main {
             flex: 1;
-            padding: 14px;
-            max-width: 720px;
+            padding: 12px;
+            max-width: 1000px;
             width: 100%;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
         }
 
-        .tab-panel {
-            display: none;
-            flex-direction: column;
-            gap: 14px;
-        }
-        .tab-panel.active {
-            display: flex;
+        /* TOP DECK: 2-COLUMN SPLIT (SCREEN LIVE KIRI, DAFTAR SLIDE KANAN) */
+        .top-deck-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 12px;
         }
 
-        /* Live Program Monitor */
+        @media (max-width: 680px) {
+            .top-deck-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+        }
+
+        /* Live Program Monitor Box (KIRI) */
         .live-card {
             background: #131B2E;
             border: 1px solid #1E293B;
             border-radius: 12px;
-            padding: 14px;
+            padding: 12px;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-            position: relative;
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
         .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
         }
 
         .badge-group {
             display: flex;
             gap: 6px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .badge {
             font-size: 10px;
             font-weight: 800;
-            padding: 3px 8px;
+            padding: 3px 7px;
             border-radius: 4px;
             letter-spacing: 0.5px;
         }
@@ -191,20 +164,21 @@ object WebRemoteHtmlBuilder {
         }
 
         .song-title {
-            font-size: 17px;
+            font-size: 15px;
             font-weight: 800;
             color: #FFFFFF;
-            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .slide-indicator {
             font-size: 11px;
             color: #94A3B8;
             font-weight: 600;
-            margin-bottom: 10px;
         }
 
-        /* Visual Mini Stage Screen Simulation */
+        /* Visual 16:9 Screen Simulation */
         .stage-preview-screen {
             position: relative;
             width: 100%;
@@ -217,7 +191,6 @@ object WebRemoteHtmlBuilder {
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            margin-bottom: 10px;
         }
 
         .stage-bg-layer {
@@ -228,6 +201,7 @@ object WebRemoteHtmlBuilder {
             background-repeat: no-repeat;
             opacity: 0.85;
             z-index: 1;
+            transition: all 0.3s ease;
         }
 
         .stage-text-layer {
@@ -237,17 +211,17 @@ object WebRemoteHtmlBuilder {
             height: 100%;
             display: flex;
             flex-direction: column;
-            padding: 12px;
+            padding: 10px;
             box-sizing: border-box;
             transition: all 0.2s ease;
         }
 
         .stage-text-box {
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.45);
             color: #FFFFFF;
-            padding: 8px 12px;
+            padding: 6px 10px;
             border-radius: 6px;
-            font-size: 15px;
+            font-size: 13px;
             line-height: 1.35;
             white-space: pre-wrap;
             word-break: break-word;
@@ -264,137 +238,68 @@ object WebRemoteHtmlBuilder {
         /* Confidence Next Preview */
         .next-preview-box {
             background: #0F172A;
-            border-left: 4px solid #10B981;
-            padding: 10px 12px;
+            border-left: 3px solid #10B981;
+            padding: 8px 10px;
             border-radius: 6px;
-            font-size: 12px;
+            font-size: 11px;
             color: #CBD5E1;
         }
         .next-preview-label {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 800;
             color: #10B981;
             margin-bottom: 2px;
         }
 
-        /* Primary Nav Controls */
-        .nav-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .btn-nav {
-            padding: 16px 12px;
-            border-radius: 10px;
-            border: none;
-            font-size: 16px;
-            font-weight: 800;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            transition: all 0.12s;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-        }
-        .btn-nav:active {
-            transform: scale(0.96);
-        }
-
-        .btn-prev {
-            background: #1E293B;
-            color: #F1F5F9;
-            border: 1px solid #334155;
-        }
-        .btn-next {
-            background: #10B981;
-            color: #FFFFFF;
-        }
-        .btn-sub {
-            font-size: 10px;
-            font-weight: 500;
-            opacity: 0.85;
-        }
-
-        /* Stage Toggle Buttons */
-        .stage-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 8px;
-        }
-
-        .btn-stage {
-            padding: 10px 6px;
-            border-radius: 8px;
-            border: 1px solid #334155;
-            font-size: 11px;
-            font-weight: 800;
-            cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 3px;
-            background: #1E293B;
-            color: #F1F5F9;
-            transition: all 0.15s;
-        }
-        .btn-stage:active {
-            transform: scale(0.96);
-        }
-
-        .btn-black.active {
-            background: #EF4444;
-            color: #FFFFFF;
-            border-color: #DC2626;
-            box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
-        }
-        .btn-clear.active {
-            background: #F59E0B;
-            color: #FFFFFF;
-            border-color: #D97706;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
-        }
-
-        /* Slide Matrix Card */
-        .section-card {
+        /* Slide Matrix Card (KANAN) */
+        .slide-matrix-card {
             background: #131B2E;
             border: 1px solid #1E293B;
             border-radius: 12px;
-            padding: 14px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+            min-height: 240px;
         }
 
-        .section-title {
+        .matrix-header {
             font-size: 12px;
             font-weight: 800;
-            color: #94A3B8;
-            letter-spacing: 0.5px;
+            color: #38BDF8;
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .matrix-count-badge {
+            background: #1E293B;
+            color: #94A3B8;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
         }
 
         .slide-list {
             display: flex;
             flex-direction: column;
             gap: 6px;
-            max-height: 280px;
+            max-height: 240px;
             overflow-y: auto;
+            padding-right: 2px;
         }
+        .slide-list::-webkit-scrollbar { width: 4px; }
+        .slide-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
 
         .slide-item {
             background: #1E293B;
             border: 1px solid #334155;
             border-radius: 8px;
-            padding: 10px 12px;
+            padding: 8px 10px;
             cursor: pointer;
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: flex-start;
             transition: all 0.15s;
         }
@@ -408,9 +313,9 @@ object WebRemoteHtmlBuilder {
         .slide-num {
             background: #0F172A;
             color: #FFFFFF;
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
-            padding: 2px 7px;
+            padding: 2px 6px;
             border-radius: 4px;
             flex-shrink: 0;
         }
@@ -420,7 +325,7 @@ object WebRemoteHtmlBuilder {
         }
 
         .slide-text {
-            font-size: 13px;
+            font-size: 12px;
             color: #CBD5E1;
             white-space: pre-wrap;
             line-height: 1.35;
@@ -434,15 +339,70 @@ object WebRemoteHtmlBuilder {
             font-weight: 700;
         }
 
-        /* Form Inputs & Lists */
+        /* BOTTOM DECK: UNIFIED CONTROL HUB (LAGU / ALKITAB / BACKGROUND / STYLE DALAM 1 LAYAR) */
+        .control-hub-card {
+            background: #131B2E;
+            border: 1px solid #1E293B;
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Segmented Selector for Bottom Hub */
+        .hub-nav {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            background: #0F172A;
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid #1E293B;
+            gap: 3px;
+        }
+
+        .hub-nav-btn {
+            background: transparent;
+            border: none;
+            color: #94A3B8;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 8px 4px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            white-space: nowrap;
+        }
+        .hub-nav-btn.active {
+            background: #3B82F6;
+            color: #FFFFFF;
+            box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+        }
+
+        .hub-panel {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .hub-panel.active {
+            display: flex;
+        }
+
+        /* Form Inputs & List Items */
         .search-input {
             width: 100%;
             background: #0F172A;
             border: 1px solid #334155;
             color: #FFFFFF;
-            padding: 10px 12px;
+            padding: 9px 12px;
             border-radius: 8px;
-            font-size: 13px;
+            font-size: 12px;
             outline: none;
         }
         .search-input:focus { border-color: #38BDF8; }
@@ -451,7 +411,7 @@ object WebRemoteHtmlBuilder {
             background: #1E293B;
             border: 1px solid #334155;
             border-radius: 8px;
-            padding: 12px;
+            padding: 10px 12px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -464,7 +424,7 @@ object WebRemoteHtmlBuilder {
         }
 
         .item-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: #FFFFFF;
         }
@@ -493,14 +453,32 @@ object WebRemoteHtmlBuilder {
         .btn-chip-bg { background: #8B5CF6; color: #FFFFFF; }
         .btn-chip-sec { background: #334155; color: #E2E8F0; }
 
-        /* Chips Grid */
         .chips-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 8px;
         }
 
-        /* Range Slider and Styling Controls */
+        /* Toggle buttons and sliders */
+        .toggle-btn {
+            background: #1E293B;
+            border: 1px solid #334155;
+            color: #CBD5E1;
+            padding: 9px 6px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+        .toggle-btn.active {
+            background: #38BDF8;
+            color: #0F172A;
+            border-color: #0284C7;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+        }
+
         .slider-group {
             display: flex;
             flex-direction: column;
@@ -509,37 +487,14 @@ object WebRemoteHtmlBuilder {
         .slider-row {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
         .slider-row input[type=range] {
             flex: 1;
             accent-color: #38BDF8;
         }
 
-        .toggle-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-        }
-
-        .toggle-btn {
-            background: #1E293B;
-            border: 1px solid #334155;
-            color: #CBD5E1;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            text-align: center;
-        }
-        .toggle-btn.active {
-            background: #38BDF8;
-            color: #0F172A;
-            border-color: #0284C7;
-        }
-
-        /* Fixed Bottom Quick Bar */
+        /* FIXED BOTTOM QUICK CONTROL BAR */
         .fixed-bar {
             position: fixed;
             bottom: 0;
@@ -549,47 +504,47 @@ object WebRemoteHtmlBuilder {
             border-top: 1px solid #1E293B;
             padding: 8px 12px;
             display: flex;
-            gap: 6px;
+            gap: 8px;
             z-index: 100;
             box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.5);
-            max-width: 720px;
+            max-width: 1000px;
             margin: 0 auto;
         }
 
         .fixed-btn {
             flex: 1;
-            padding: 10px 4px;
+            padding: 12px 6px;
             border-radius: 8px;
             border: none;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 800;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
+            gap: 5px;
             transition: all 0.12s;
         }
         .fixed-btn:active { transform: scale(0.96); }
 
         .fixed-btn-prev { background: #1E293B; color: #FFFFFF; border: 1px solid #334155; }
-        .fixed-btn-next { background: #10B981; color: #FFFFFF; }
+        .fixed-btn-next { background: #10B981; color: #FFFFFF; box-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
         .fixed-btn-black { background: #334155; color: #F1F5F9; }
         .fixed-btn-clear { background: #334155; color: #F1F5F9; }
 
-        .fixed-btn-black.active { background: #EF4444; color: #FFFFFF; }
-        .fixed-btn-clear.active { background: #F59E0B; color: #FFFFFF; }
+        .fixed-btn-black.active { background: #EF4444; color: #FFFFFF; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+        .fixed-btn-clear.active { background: #F59E0B; color: #FFFFFF; box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
     </style>
 </head>
 <body>
-    <!-- HEADER -->
+    <!-- TOP APP HEADER -->
     <header>
         <div class="brand">
-            <span style="font-size: 18px;">📱</span>
+            <span style="font-size: 17px;">📱</span>
             <div>
                 <h1>REMOTE CONSOLE</h1>
             </div>
-            <span class="brand-sub">PRO</span>
+            <span class="brand-sub">CONTROL</span>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
             <div class="status-pill">
@@ -600,20 +555,10 @@ object WebRemoteHtmlBuilder {
         </div>
     </header>
 
-    <!-- NAVIGATION TABS -->
-    <nav class="tab-bar">
-        <button class="tab-btn active" onclick="switchTab('console')">🎛 Console</button>
-        <button class="tab-btn" onclick="switchTab('songs')">🎵 Lagu</button>
-        <button class="tab-btn" onclick="switchTab('bible')">📖 Alkitab</button>
-        <button class="tab-btn" onclick="switchTab('background')">🖼 Background</button>
-        <button class="tab-btn" onclick="switchTab('style')">🎨 Format</button>
-    </nav>
-
-    <!-- MAIN PANELS -->
     <main>
-        <!-- TAB 1: CONSOLE (LIVE MONITOR & SLIDE CONTROLS) -->
-        <div id="tab-console" class="tab-panel active">
-            <!-- LIVE STAGE PREVIEW SCREEN -->
+        <!-- TOP DECK: SCREEN LIVE (KIRI) & DAFTAR SLIDE (KANAN) -->
+        <div class="top-deck-grid">
+            <!-- LIVE STAGE PREVIEW (KIRI) -->
             <div class="live-card">
                 <div class="card-header">
                     <div class="badge-group">
@@ -623,10 +568,12 @@ object WebRemoteHtmlBuilder {
                     <span id="badge-bg" class="badge badge-bg">BG: NONE</span>
                 </div>
 
-                <h2 id="song-title" class="song-title">Memuat Tayangan...</h2>
-                <div id="slide-indicator" class="slide-indicator">Slide 0 dari 0</div>
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <h2 id="song-title" class="song-title">Memuat Tayangan...</h2>
+                    <div id="slide-indicator" class="slide-indicator">Slide 0/0</div>
+                </div>
 
-                <!-- SIMULATED 16:9 SCREEN PREVIEW -->
+                <!-- SIMULATED 16:9 LIVE MONITOR SCREEN -->
                 <div class="stage-preview-screen" id="preview-screen-box">
                     <div class="stage-bg-layer" id="preview-bg-layer"></div>
                     <div class="stage-text-layer pos-center" id="preview-text-layer">
@@ -641,177 +588,129 @@ object WebRemoteHtmlBuilder {
                 </div>
             </div>
 
-            <!-- PRIMARY NAVIGATION CONTROLS -->
-            <div class="nav-controls">
-                <button class="btn-nav btn-prev" onclick="sendAction('prev')">
-                    <span>⏮ PREV</span>
-                    <span class="btn-sub">Slide Sebelumnya</span>
-                </button>
-                <button class="btn-nav btn-next" onclick="sendAction('next')">
-                    <span>NEXT ⏭</span>
-                    <span class="btn-sub">Slide Selanjutnya</span>
-                </button>
-            </div>
-
-            <!-- STAGE TOGGLES -->
-            <div class="stage-controls">
-                <button id="btn-black" class="btn-stage btn-black" onclick="sendAction('black')">
-                    <span>⚫</span>
-                    <span id="label-black">BLACKOUT</span>
-                </button>
-                <button id="btn-clear" class="btn-stage btn-clear" onclick="sendAction('clear')">
-                    <span>🔲</span>
-                    <span id="label-clear">CLEAR TEXT</span>
-                </button>
-                <button id="btn-vid-toggle" class="btn-stage" onclick="sendAction('toggle_video')">
-                    <span>⏯</span>
-                    <span>PAUSE BG</span>
-                </button>
-            </div>
-
-            <!-- INTERACTIVE SLIDE MATRIX -->
-            <div class="section-card">
-                <div class="section-title">
-                    <span>DAFTAR SLIDE (TAP UNTUK PINDAH)</span>
-                    <span id="matrix-count" style="font-size: 11px; color: #94A3B8;">0 slides</span>
+            <!-- INTERACTIVE SLIDE MATRIX (KANAN) -->
+            <div class="slide-matrix-card">
+                <div class="matrix-header">
+                    <span>DAFTAR SLIDE AKTIF</span>
+                    <span id="matrix-count" class="matrix-count-badge">0 slides</span>
                 </div>
                 <div id="slide-list" class="slide-list">
-                    <!-- Dynamic Slide Items will be rendered here -->
+                    <div style="color: #64748B; font-size: 11px; text-align: center; padding: 20px;">Belum ada slide aktif</div>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 2: SONGS & LYRICS -->
-        <div id="tab-songs" class="tab-panel">
-            <div class="section-card">
-                <div class="section-title">
-                    <span>CARI & TAYANGKAN LAGU</span>
-                    <button class="btn-chip btn-chip-live" onclick="toggleAddSongForm()">+ Tambah Lagu</button>
+        <!-- BOTTOM DECK: UNIFIED CONTROL HUB (LAGU / ALKITAB / BACKGROUND / FORMAT DALAM 1 LAYAR) -->
+        <div class="control-hub-card">
+            <!-- SEGMENTED TABS -->
+            <div class="hub-nav">
+                <button class="hub-nav-btn active" onclick="switchHubPanel('songs')">🎵 Lagu</button>
+                <button class="hub-nav-btn" onclick="switchHubPanel('bible')">📖 Alkitab</button>
+                <button class="hub-nav-btn" onclick="switchHubPanel('background')">🖼 Background</button>
+                <button class="hub-nav-btn" onclick="switchHubPanel('style')">🎨 Format</button>
+            </div>
+
+            <!-- PANEL 1: LAGU & LIRIK -->
+            <div id="hub-songs" class="hub-panel active">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="song-search-input" class="search-input" placeholder="🔍 Cari judul lagu / lirik..." oninput="filterSongs()">
+                    <button class="btn-chip btn-chip-live" style="white-space: nowrap; padding: 9px 12px;" onclick="toggleAddSongForm()">+ Lagu</button>
                 </div>
-                <input type="text" id="song-search-input" class="search-input" placeholder="🔍 Cari judul lagu / lirik..." oninput="filterSongs()">
 
                 <!-- QUICK ADD SONG FORM -->
-                <div id="add-song-form" style="display: none; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #334155; margin-top: 8px;">
-                    <div style="font-size: 12px; font-weight: 800; color: #38BDF8; margin-bottom: 8px;">TAMBAH LAGU BARU</div>
-                    <input type="text" id="new-song-title" class="search-input" placeholder="Judul Lagu..." style="margin-bottom: 8px;">
-                    <textarea id="new-song-lyrics" class="search-input" rows="4" placeholder="Ketik lirik (pisahkan bait dengan 1 baris kosong)..." style="margin-bottom: 8px;"></textarea>
-                    <div style="display: flex; gap: 8px;">
+                <div id="add-song-form" style="display: none; background: #0F172A; padding: 10px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="font-size: 11px; font-weight: 800; color: #38BDF8; margin-bottom: 6px;">TAMBAH LAGU BARU</div>
+                    <input type="text" id="new-song-title" class="search-input" placeholder="Judul Lagu..." style="margin-bottom: 6px;">
+                    <textarea id="new-song-lyrics" class="search-input" rows="3" placeholder="Ketik lirik (pisahkan bait dengan 1 baris kosong)..." style="margin-bottom: 6px;"></textarea>
+                    <div style="display: flex; gap: 6px;">
                         <button class="btn-chip btn-chip-live" onclick="submitNewSong()">💾 Simpan & Tayangkan</button>
                         <button class="btn-chip btn-chip-sec" onclick="toggleAddSongForm()">Batal</button>
                     </div>
                 </div>
 
-                <div id="songs-list-container" style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                <div id="songs-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
                     <!-- Dynamic songs rendered here -->
                 </div>
             </div>
-        </div>
 
-        <!-- TAB 3: BIBLE & SCRIPTURES -->
-        <div id="tab-bible" class="tab-panel">
-            <div class="section-card">
-                <div class="section-title">
-                    <span>AYAT POPULER (1-KLIK GO LIVE)</span>
-                </div>
+            <!-- PANEL 2: ALKITAB & SCRIPTURE -->
+            <div id="hub-bible" class="hub-panel">
+                <div style="font-size: 11px; font-weight: 800; color: #94A3B8;">AYAT POPULER (1-KLIK GO LIVE)</div>
                 <div id="bible-quick-chips" class="chips-grid">
                     <!-- Dynamic Bible chips rendered here -->
                 </div>
+
+                <div style="font-size: 11px; font-weight: 800; color: #94A3B8; margin-top: 4px;">KUTIPAN AYAT / PENGUMUMAN CUSTOM</div>
+                <input type="text" id="bible-custom-title" class="search-input" placeholder="Kitab & Pasal (misal: Yohanes 3:16)...">
+                <textarea id="bible-custom-text" class="search-input" rows="2" placeholder="Teks Ayat Alkitab..."></textarea>
+                <button class="btn-chip btn-chip-live" style="padding: 9px; font-size: 12px; justify-content: center;" onclick="submitCustomBible()">🚀 TAYANGKAN AYAT KE LAYAR</button>
             </div>
 
-            <!-- QUICK SCRIPTURE COMPOSER -->
-            <div class="section-card">
-                <div class="section-title">
-                    <span>TAYANGKAN AYAT CUSTOM</span>
+            <!-- PANEL 3: BACKGROUND & MEDIA -->
+            <div id="hub-background" class="hub-panel">
+                <!-- ACTIVE BACKGROUND STATUS -->
+                <div style="background: #18152E; border: 1px solid #8B5CF6; padding: 8px 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-size: 9px; font-weight: 800; color: #C4B5FD;">BACKGROUND AKTIF:</div>
+                        <div id="bg-active-desc" style="font-size: 12px; font-weight: 700; color: #FFFFFF;">⚪ Standar Gelap</div>
+                    </div>
+                    <button class="btn-chip" style="background: #EF4444; color: #FFFFFF; font-size: 10px;" onclick="clearBackground()">❌ Hapus BG</button>
                 </div>
-                <input type="text" id="bible-custom-title" class="search-input" placeholder="Nama Kitab & Pasal (contoh: Yohanes 3:16)..." style="margin-bottom: 8px;">
-                <textarea id="bible-custom-text" class="search-input" rows="3" placeholder="Teks Ayat Alkitab..." style="margin-bottom: 8px;"></textarea>
-                <button class="btn-chip btn-chip-live" style="padding: 10px; font-size: 13px;" onclick="submitCustomBible()">🚀 TAYANGKAN AYAT KE LAYAR</button>
-            </div>
-        </div>
 
-        <!-- TAB 4: MEDIA & BACKGROUND SETTING -->
-        <div id="tab-background" class="tab-panel">
-            <!-- ACTIVE BACKGROUND MONITOR -->
-            <div class="section-card" style="border: 1px solid #8B5CF6; background: #18152E;">
-                <div class="section-title">
-                    <span style="color: #C4B5FD;">BACKGROUND AKTIF DI LAYAR</span>
-                    <button class="btn-chip" style="background: #EF4444; color: #FFFFFF;" onclick="clearBackground()">❌ Hapus BG</button>
-                </div>
-                <div id="bg-active-desc" style="font-size: 14px; font-weight: 800; color: #FFFFFF;">⚪ Tanpa Background (Gelap Bersih)</div>
-            </div>
-
-            <!-- CHOOSE BACKGROUND PRESETS -->
-            <div class="section-card">
-                <div class="section-title">
-                    <span>PILIH BACKGROUND / MEDIA</span>
-                    <button class="btn-chip btn-chip-bg" onclick="toggleAddDroidCamForm()">+ DroidCam IP</button>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 11px; font-weight: 800; color: #94A3B8;">SUMBER BACKGROUND</span>
+                    <button class="btn-chip btn-chip-bg" style="font-size: 10px; padding: 4px 8px;" onclick="toggleAddDroidCamForm()">+ DroidCam IP</button>
                 </div>
 
                 <!-- ADD DROIDCAM FORM -->
-                <div id="add-droidcam-form" style="display: none; background: #0F172A; padding: 12px; border-radius: 8px; border: 1px solid #8B5CF6; margin-bottom: 8px;">
-                    <div style="font-size: 12px; font-weight: 800; color: #C4B5FD; margin-bottom: 8px;">HUBUNGKAN DROIDCAM / IP CAMERA</div>
-                    <input type="text" id="droid-name" class="search-input" placeholder="Nama Kamera (misal: HP Depan)..." style="margin-bottom: 8px;">
-                    <input type="text" id="droid-ip" class="search-input" placeholder="IP HP (contoh: 192.168.1.50)..." style="margin-bottom: 8px;">
-                    <input type="text" id="droid-port" class="search-input" placeholder="Port (default: 4747)..." value="4747" style="margin-bottom: 8px;">
-                    <div style="display: flex; gap: 8px;">
+                <div id="add-droidcam-form" style="display: none; background: #0F172A; padding: 10px; border-radius: 8px; border: 1px solid #8B5CF6;">
+                    <div style="font-size: 11px; font-weight: 800; color: #C4B5FD; margin-bottom: 6px;">DROIDCAM / IP CAMERA</div>
+                    <input type="text" id="droid-name" class="search-input" placeholder="Nama Kamera (misal: HP Depan)..." style="margin-bottom: 6px;">
+                    <input type="text" id="droid-ip" class="search-input" placeholder="IP HP (contoh: 192.168.1.50)..." style="margin-bottom: 6px;">
+                    <input type="text" id="droid-port" class="search-input" placeholder="Port (default: 4747)..." value="4747" style="margin-bottom: 6px;">
+                    <div style="display: flex; gap: 6px;">
                         <button class="btn-chip btn-chip-bg" onclick="submitDroidCam()">💾 Simpan & Set BG</button>
                         <button class="btn-chip btn-chip-sec" onclick="toggleAddDroidCamForm()">Batal</button>
                     </div>
                 </div>
 
-                <!-- DEFAULT BACKGROUND OPTIONS -->
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <!-- NONE -->
-                    <div class="item-card">
+                <div style="display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto;">
+                    <!-- DEFAULT -->
+                    <div class="item-card" style="padding: 8px 10px;">
                         <div class="item-header">
-                            <div class="item-title">⚪ Standar Gelap (Dark Gradient)</div>
-                            <button class="btn-chip btn-chip-sec" onclick="clearBackground()">Set Default</button>
+                            <div class="item-title">⚪ Standar Gelap (Clean)</div>
+                            <button class="btn-chip btn-chip-sec" onclick="clearBackground()">Set</button>
                         </div>
                     </div>
 
                     <!-- LOCAL CAMERA -->
-                    <div class="item-card">
+                    <div class="item-card" style="padding: 8px 10px;">
                         <div class="item-header">
                             <div class="item-title">📷 Kamera HP Utama (Local Cam)</div>
-                        </div>
-                        <div class="btn-action-row">
-                            <button class="btn-chip btn-chip-bg" onclick="sendAction('set_bg', { bgType: 'CAMERA' })">🖼 Set Background</button>
-                            <button class="btn-chip btn-chip-live" onclick="sendAction('go_custom', { title: 'Live Camera', text: 'Live Video Feed', type: 'CAMERA' })">▶ Go Live</button>
+                            <button class="btn-chip btn-chip-bg" onclick="sendAction('set_bg', { bgType: 'CAMERA' })">🖼 Set BG</button>
                         </div>
                     </div>
 
                     <!-- MEDIA LIBRARY ITEMS -->
-                    <div id="media-library-items" style="display: flex; flex-direction: column; gap: 8px;">
-                        <!-- Dynamic media items rendered here -->
+                    <div id="media-library-items" style="display: flex; flex-direction: column; gap: 6px;">
+                        <!-- Dynamic media items -->
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- TAB 5: FORMAT & STYLE -->
-        <div id="tab-style" class="tab-panel">
-            <!-- QUICK PRESETS -->
-            <div class="section-card">
-                <div class="section-title">
-                    <span>1-KLIK PRESET TEMA TAMPILAN</span>
-                </div>
+            <!-- PANEL 4: FORMAT & STYLE -->
+            <div id="hub-style" class="hub-panel">
+                <div style="font-size: 11px; font-weight: 800; color: #94A3B8;">1-KLIK PRESET TEMA</div>
                 <div class="chips-grid">
                     <button class="toggle-btn" onclick="sendAction('set_preset', { preset: 'WORSHIP' })">🌟 Worship (Center 32sp)</button>
                     <button class="toggle-btn" onclick="sendAction('set_preset', { preset: 'PRAISE' })">⚡ Praise (Center 36sp Bold)</button>
                     <button class="toggle-btn" onclick="sendAction('set_preset', { preset: 'SERMON' })">📖 Kotbah (Lower Third 24sp)</button>
                     <button class="toggle-btn" onclick="sendAction('set_preset', { preset: 'MINIMALIST' })">✨ Minimalist (Lower Third)</button>
                 </div>
-            </div>
-
-            <!-- CUSTOM ADJUSTMENTS -->
-            <div class="section-card">
-                <div class="section-title">
-                    <span>KUSTOMISASI UKURAN & POSISI TEKS</span>
-                </div>
 
                 <!-- FONT SIZE -->
-                <div class="slider-group">
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 700;">
+                <div class="slider-group" style="margin-top: 4px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;">
                         <span>Ukuran Font:</span>
                         <span id="font-size-val" style="color: #38BDF8;">32 sp</span>
                     </div>
@@ -823,38 +722,39 @@ object WebRemoteHtmlBuilder {
                 </div>
 
                 <!-- POSITION -->
-                <div style="margin-top: 8px;">
-                    <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">Posisi Teks di Layar:</div>
+                <div style="margin-top: 4px;">
+                    <div style="font-size: 11px; font-weight: 700; margin-bottom: 4px;">Posisi Teks:</div>
                     <div class="chips-grid">
                         <button id="pos-btn-CENTER" class="toggle-btn active" onclick="updatePosition('CENTER')">Tengah (Center)</button>
-                        <button id="pos-btn-LOWER_THIRD" class="toggle-btn" onclick="updatePosition('LOWER_THIRD')">Lower Third (Bawah 1/3)</button>
+                        <button id="pos-btn-LOWER_THIRD" class="toggle-btn" onclick="updatePosition('LOWER_THIRD')">Lower Third</button>
                         <button id="pos-btn-TOP" class="toggle-btn" onclick="updatePosition('TOP')">Atas (Top Banner)</button>
-                        <button id="pos-btn-BOTTOM" class="toggle-btn" onclick="updatePosition('BOTTOM')">Bawah Rata Kiri</button>
+                        <button id="pos-btn-BOTTOM" class="toggle-btn" onclick="updatePosition('BOTTOM')">Bawah Kiri</button>
                     </div>
                 </div>
 
-                <!-- ALIGNMENT -->
-                <div style="margin-top: 8px;">
-                    <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px;">Perataan Teks:</div>
-                    <div class="toggle-group" style="grid-template-columns: 1fr 1fr 1fr;">
-                        <button id="align-btn-left" class="toggle-btn" onclick="updateAlignment('LEFT')">Kiri</button>
-                        <button id="align-btn-center" class="toggle-btn active" onclick="updateAlignment('CENTER')">Tengah</button>
-                        <button id="align-btn-right" class="toggle-btn" onclick="updateAlignment('RIGHT')">Kanan</button>
+                <!-- ALIGNMENT & TOGGLES -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;">
+                    <div>
+                        <div style="font-size: 11px; font-weight: 700; margin-bottom: 4px;">Perataan Teks:</div>
+                        <div style="display: flex; gap: 4px;">
+                            <button id="align-btn-left" class="toggle-btn" style="flex:1" onclick="updateAlignment('LEFT')">Kiri</button>
+                            <button id="align-btn-center" class="toggle-btn active" style="flex:1" onclick="updateAlignment('CENTER')">Tengah</button>
+                            <button id="align-btn-right" class="toggle-btn" style="flex:1" onclick="updateAlignment('RIGHT')">Kanan</button>
+                        </div>
                     </div>
-                </div>
-
-                <!-- TOGGLES -->
-                <div style="margin-top: 8px;">
-                    <div class="chips-grid">
-                        <button id="btn-toggle-bold" class="toggle-btn active" onclick="toggleBold()">Tebal (Bold)</button>
-                        <button id="btn-toggle-shadow" class="toggle-btn active" onclick="toggleShadow()">Bayangan Teks</button>
+                    <div>
+                        <div style="font-size: 11px; font-weight: 700; margin-bottom: 4px;">Efek:</div>
+                        <div style="display: flex; gap: 4px;">
+                            <button id="btn-toggle-bold" class="toggle-btn active" style="flex:1" onclick="toggleBold()">Tebal</button>
+                            <button id="btn-toggle-shadow" class="toggle-btn active" style="flex:1" onclick="toggleShadow()">Bayangan</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- FIXED BOTTOM QUICK CONTROL BAR (FOR QUICK THUMB ACCESS) -->
+    <!-- FIXED BOTTOM QUICK CONTROL BAR (TETAP SATU, TIDAK DOUBLE) -->
     <div class="fixed-bar">
         <button class="fixed-btn fixed-btn-prev" onclick="sendAction('prev')">⏮ PREV</button>
         <button class="fixed-btn fixed-btn-next" onclick="sendAction('next')">NEXT ⏭</button>
@@ -882,25 +782,21 @@ object WebRemoteHtmlBuilder {
         const previewTextBox = document.getElementById('preview-text-box');
         const nextBox = document.getElementById('next-box');
         const nextText = document.getElementById('next-text');
-        const btnBlack = document.getElementById('btn-black');
-        const labelBlack = document.getElementById('label-black');
-        const btnClear = document.getElementById('btn-clear');
-        const labelClear = document.getElementById('label-clear');
         const fixedBlack = document.getElementById('fixed-black');
         const fixedClear = document.getElementById('fixed-clear');
         const slideListContainer = document.getElementById('slide-list');
         const matrixCount = document.getElementById('matrix-count');
         const bgActiveDesc = document.getElementById('bg-active-desc');
 
-        // Tab Switching
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        // Hub Switching on main single-screen
+        function switchHubPanel(panelId) {
+            document.querySelectorAll('.hub-nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.hub-panel').forEach(p => p.classList.remove('active'));
 
-            const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+            const targetBtn = Array.from(document.querySelectorAll('.hub-nav-btn')).find(b => b.getAttribute('onclick').includes(panelId));
             if (targetBtn) targetBtn.classList.add('active');
 
-            const targetPanel = document.getElementById('tab-' + tabId);
+            const targetPanel = document.getElementById('hub-' + panelId);
             if (targetPanel) targetPanel.classList.add('active');
         }
 
@@ -1012,25 +908,17 @@ object WebRemoteHtmlBuilder {
             if (status === 'BLACK') {
                 badgeStatus.className = 'badge badge-black';
                 badgeStatus.innerText = 'BLACKOUT ON';
-                btnBlack.classList.add('active');
                 fixedBlack.classList.add('active');
-                labelBlack.innerText = 'UN-BLACK';
             } else {
                 badgeStatus.className = 'badge badge-live';
                 badgeStatus.innerText = 'LIVE ON AIR';
-                btnBlack.classList.remove('active');
                 fixedBlack.classList.remove('active');
-                labelBlack.innerText = 'BLACKOUT';
             }
 
             if (status === 'CLEAR') {
-                btnClear.classList.add('active');
                 fixedClear.classList.add('active');
-                labelClear.innerText = 'SHOW TEXT';
             } else {
-                btnClear.classList.remove('active');
                 fixedClear.classList.remove('active');
-                labelClear.innerText = 'CLEAR TEXT';
             }
 
             badgeType.innerText = data.contentType || 'IDLE';
@@ -1047,7 +935,7 @@ object WebRemoteHtmlBuilder {
                 bgActiveDesc.innerText = '📷 Kamera HP Utama (Local Cam)';
                 previewBgLayer.style.backgroundImage = 'linear-gradient(45deg, #1E1B4B, #312E81)';
             } else if (bgType === 'IP_CAMERA') {
-                bgActiveDesc.innerText = '📱 DroidCam Stream (' + (data.backgroundMediaUrl || '') + ')';
+                bgActiveDesc.innerText = '📱 DroidCam (' + (data.backgroundMediaUrl || '') + ')';
                 previewBgLayer.style.backgroundImage = 'linear-gradient(45deg, #3730A3, #1E1B4B)';
             } else if (bgType === 'IMAGE') {
                 bgActiveDesc.innerText = '🖼 Gambar Background';
@@ -1061,7 +949,7 @@ object WebRemoteHtmlBuilder {
             songTitle.innerText = data.title || 'Church Presentation System';
             const total = data.totalSlides || 0;
             const currentIdx = data.slideIndex || 0;
-            slideIndicator.innerText = total > 0 ? ('Slide ' + (currentIdx + 1) + ' dari ' + total) : 'Standby Mode';
+            slideIndicator.innerText = total > 0 ? ('Slide ' + (currentIdx + 1) + '/' + total) : 'Standby';
 
             // Text Screen Simulation
             if (status === 'BLACK') {
@@ -1094,7 +982,7 @@ object WebRemoteHtmlBuilder {
             slideListContainer.innerHTML = '';
 
             if (slides.length === 0) {
-                slideListContainer.innerHTML = '<div style="color: #64748B; font-size: 12px; text-align: center; padding: 12px;">Belum ada slide aktif</div>';
+                slideListContainer.innerHTML = '<div style="color: #64748B; font-size: 11px; text-align: center; padding: 20px;">Belum ada slide aktif</div>';
             } else {
                 slides.forEach((slideContent, idx) => {
                     const itemDiv = document.createElement('div');
@@ -1116,7 +1004,7 @@ object WebRemoteHtmlBuilder {
             }
         }
 
-        // Render Songs List in Tab 2
+        // Render Songs List in Hub Panel
         function renderSongs() {
             const container = document.getElementById('songs-list-container');
             container.innerHTML = '';
@@ -1124,7 +1012,7 @@ object WebRemoteHtmlBuilder {
             const songs = (libraryData.songs || []).filter(s => s.title.toLowerCase().includes(query) || s.slides.some(v => v.toLowerCase().includes(query)));
 
             if (songs.length === 0) {
-                container.innerHTML = '<div style="color: #64748B; font-size: 12px; text-align: center; padding: 16px;">Tidak ada lagu ditemukan</div>';
+                container.innerHTML = '<div style="color: #64748B; font-size: 11px; text-align: center; padding: 12px;">Tidak ada lagu ditemukan</div>';
                 return;
             }
 
@@ -1144,7 +1032,6 @@ object WebRemoteHtmlBuilder {
                 goLiveBtn.innerHTML = '▶ TAYANGKAN';
                 goLiveBtn.onclick = () => {
                     sendAction('go_song', { songId: song.id, slide: 0 });
-                    switchTab('console');
                 };
                 btnRow.appendChild(goLiveBtn);
 
@@ -1155,7 +1042,6 @@ object WebRemoteHtmlBuilder {
                     slideBtn.innerText = 'Bait ' + (idx + 1);
                     slideBtn.onclick = () => {
                         sendAction('go_song', { songId: song.id, slide: idx });
-                        switchTab('console');
                     };
                     btnRow.appendChild(slideBtn);
                 });
@@ -1184,10 +1070,9 @@ object WebRemoteHtmlBuilder {
             sendAction('go_custom', { title: title, text: lyrics, type: 'LYRICS' });
             toggleAddSongForm();
             setTimeout(loadLibrary, 500);
-            switchTab('console');
         }
 
-        // Render Bible Chips in Tab 3
+        // Render Bible Chips in Hub Panel
         function renderBible() {
             const container = document.getElementById('bible-quick-chips');
             container.innerHTML = '';
@@ -1199,7 +1084,6 @@ object WebRemoteHtmlBuilder {
                 btn.innerText = '📖 ' + p.title;
                 btn.onclick = () => {
                     sendAction('go_bible', { bibleId: p.id, verse: 0 });
-                    switchTab('console');
                 };
                 container.appendChild(btn);
             });
@@ -1210,10 +1094,9 @@ object WebRemoteHtmlBuilder {
             const text = document.getElementById('bible-custom-text').value.trim();
             if (!text) return;
             sendAction('go_custom', { title: title || 'Alkitab', text: text, type: 'BIBLE' });
-            switchTab('console');
         }
 
-        // Render Media Items in Tab 4
+        // Render Media Items in Hub Panel
         function renderMedia() {
             const container = document.getElementById('media-library-items');
             container.innerHTML = '';
@@ -1222,6 +1105,7 @@ object WebRemoteHtmlBuilder {
             mediaList.forEach(m => {
                 const card = document.createElement('div');
                 card.className = 'item-card';
+                card.style.padding = '8px 10px';
 
                 const header = document.createElement('div');
                 header.className = 'item-header';
@@ -1233,15 +1117,14 @@ object WebRemoteHtmlBuilder {
 
                 const setBgBtn = document.createElement('button');
                 setBgBtn.className = 'btn-chip btn-chip-bg';
-                setBgBtn.innerText = '🖼 Set Background';
+                setBgBtn.innerText = '🖼 Set BG';
                 setBgBtn.onclick = () => sendAction('set_bg_media', { mediaId: m.id });
 
                 const goLiveBtn = document.createElement('button');
                 goLiveBtn.className = 'btn-chip btn-chip-live';
-                goLiveBtn.innerText = '▶ Go Live Full';
+                goLiveBtn.innerText = '▶ Go Live';
                 goLiveBtn.onclick = () => {
                     sendAction('go_media', { mediaId: m.id });
-                    switchTab('console');
                 };
 
                 btnRow.appendChild(setBgBtn);
@@ -1271,10 +1154,9 @@ object WebRemoteHtmlBuilder {
             sendAction('set_bg', { bgType: 'IP_CAMERA', url: 'http://' + ip + ':' + port + '/video' });
             toggleAddDroidCamForm();
             setTimeout(loadLibrary, 500);
-            switchTab('console');
         }
 
-        // Style Settings Handlers in Tab 5
+        // Style Settings Handlers
         function onFontSizeChange(val) {
             document.getElementById('font-size-val').innerText = val + ' sp';
             sendAction('update_style', { fontSize: parseInt(val) });
@@ -1319,7 +1201,7 @@ object WebRemoteHtmlBuilder {
             sendAction('update_style', { isShadow: isShadowActive });
         }
 
-        // Keyboard Controls
+        // Keyboard Shortcuts
         window.addEventListener('keydown', function(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
