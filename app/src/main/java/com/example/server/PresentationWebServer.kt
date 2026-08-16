@@ -5,12 +5,12 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.util.Log
 import com.example.features.camera.CameraStreamManager
+import com.example.features.lyrics.LyricsStylePreset
 import com.example.model.*
-import com.example.presentation.BackgroundType
-import com.example.presentation.PresentationServer
-import com.example.presentation.PresentationStatus
+import com.example.presentation.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
 import java.net.InetAddress
@@ -153,7 +153,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             val query = if (questionIdx >= 0) fullUri.substring(questionIdx + 1) else ""
 
             val isUpgrade = headers["upgrade"]?.equals("websocket", ignoreCase = true) == true
-            val isWebSocket = path.startsWith("/ws") || (path == "/" && isUpgrade)
+            val isWebSocket = path.startsWith("/ws") || (path == "/" && isUpgrade) || (path == "/remote" && isUpgrade)
 
             if (isWebSocket && isUpgrade) {
                 val clientKey = headers["sec-websocket-key"]
@@ -184,6 +184,40 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
                         socket.close()
                     }
+                    path == "/api/library" -> {
+                        val json = presentationServer.buildLibraryJson().toString()
+                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
+                        socket.close()
+                    }
+                    path == "/api/remote" -> {
+                        val cmdJson = JSONObject()
+                        if (query.isNotEmpty()) {
+                            val params = query.split("&")
+                            for (p in params) {
+                                val idx = p.indexOf("=")
+                                if (idx > 0) {
+                                    val key = p.substring(0, idx)
+                                    val v = try { URLDecoder.decode(p.substring(idx + 1), "UTF-8") } catch (_: Throwable) { p.substring(idx + 1) }
+                                    when (key) {
+                                        "slide", "fontSize", "verse" -> cmdJson.put(key, v.toIntOrNull() ?: 0)
+                                        "isBold", "isShadow" -> cmdJson.put(key, v.toBoolean())
+                                        "alpha" -> cmdJson.put(key, v.toDoubleOrNull() ?: 0.0)
+                                        else -> cmdJson.put(key, v)
+                                    }
+                                }
+                            }
+                        }
+                        executeRemoteCommand(cmdJson)
+                        val json = buildStateJson()
+                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
+                        socket.close()
+                    }
+                    path == "/remote" -> {
+                        // Serve Web Remote Controller HTML
+                        val html = getWebRemoteHtml()
+                        sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
+                        socket.close()
+                    }
                     path == "/camera/stream" -> {
                         serveCameraStream(socket, output)
                         // Stream keeps running until socket closes
@@ -202,7 +236,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         socket.close()
                     }
                     else -> {
-                        // Serve Live Presentation HTML
+                        // Serve Live Presentation Screen HTML
                         val html = getPresentationViewerHtml()
                         sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
                         socket.close()
@@ -387,6 +421,12 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     readBytes += r
                 }
 
+                if (isMasked) {
+                    for (i in 0 until targetSize) {
+                        payload[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
+                    }
+                }
+
                 if (opcode == 0x8) {
                     break
                 } else if (opcode == 0x9) {
@@ -396,9 +436,151 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         out.write(0)
                         out.flush()
                     }
+                } else if (opcode == 0x1) {
+                    // WebSocket Text Message received (Remote commands)
+                    try {
+                        val textMsg = String(payload, Charsets.UTF_8)
+                        val cmdJson = JSONObject(textMsg)
+                        executeRemoteCommand(cmdJson)
+                    } catch (_: Throwable) {}
                 }
             }
         } catch (_: Throwable) {}
+    }
+
+    private fun executeRemoteCommand(cmdJson: JSONObject) {
+        val action = cmdJson.optString("action")
+        when (action) {
+            "next" -> presentationServer.nextSlide()
+            "prev" -> presentationServer.previousSlide()
+            "jump" -> {
+                val slide = cmdJson.optInt("slide", 0)
+                presentationServer.setSlideIndex(slide)
+            }
+            "black" -> presentationServer.black()
+            "clear" -> presentationServer.clear()
+            "toggle_video" -> presentationServer.toggleVideoPlayback()
+            "go_song" -> {
+                val songId = cmdJson.optString("songId")
+                val slide = cmdJson.optInt("slide", 0)
+                val song = presentationServer.songsLibrary.find { it.id == songId }
+                if (song != null) {
+                    presentationServer.go(song)
+                    presentationServer.setSlideIndex(slide)
+                }
+            }
+            "go_bible" -> {
+                val bibleId = cmdJson.optString("bibleId")
+                val verse = cmdJson.optInt("verse", 0)
+                val bible = presentationServer.sampleBiblePassages.find { it.id == bibleId }
+                if (bible != null) {
+                    presentationServer.go(bible)
+                    presentationServer.setSlideIndex(verse)
+                }
+            }
+            "go_media" -> {
+                val mediaId = cmdJson.optString("mediaId")
+                val media = presentationServer.mediaLibrary.find { it.id == mediaId }
+                if (media != null) {
+                    presentationServer.go(media)
+                }
+            }
+            "go_custom" -> {
+                val title = cmdJson.optString("title")
+                val text = cmdJson.optString("text")
+                val type = cmdJson.optString("type", "LYRICS")
+                if (text.isNotEmpty()) {
+                    presentationServer.goCustomText(title, text, type)
+                }
+            }
+            "set_bg" -> {
+                val bgType = cmdJson.optString("bgType")
+                val url = cmdJson.optString("url")
+                when (bgType.uppercase()) {
+                    "NONE" -> {
+                        presentationServer.setBackgroundImage(null)
+                        presentationServer.setBackgroundVideo(null)
+                        presentationServer.setBackgroundCamera(false)
+                    }
+                    "CAMERA" -> presentationServer.setBackgroundCamera(true)
+                    "IP_CAMERA" -> presentationServer.setBackgroundIpCamera(url)
+                    "VIDEO" -> presentationServer.setBackgroundVideo(url)
+                    "IMAGE" -> presentationServer.setBackgroundImage(url)
+                }
+            }
+            "set_bg_media" -> {
+                val mediaId = cmdJson.optString("mediaId")
+                val media = presentationServer.mediaLibrary.find { it.id == mediaId }
+                when (media) {
+                    is IpCameraContent -> presentationServer.setBackgroundIpCamera(media.streamUrl)
+                    is CameraContent -> presentationServer.setBackgroundCamera(true)
+                    is ImageContent -> presentationServer.setBackgroundImage(media.uri)
+                    is VideoContent -> presentationServer.setBackgroundVideo(media.uri)
+                    else -> {}
+                }
+            }
+            "add_droidcam" -> {
+                val title = cmdJson.optString("title")
+                val ip = cmdJson.optString("ip")
+                val port = cmdJson.optString("port", "4747")
+                if (ip.isNotEmpty()) {
+                    presentationServer.addDroidCamMedia(title, ip, port)
+                }
+            }
+            "add_song" -> {
+                val title = cmdJson.optString("title")
+                val text = cmdJson.optString("text")
+                if (title.isNotEmpty() && text.isNotEmpty()) {
+                    val slides = text.split("\n\n").map { it.trim() }.filter { it.isNotEmpty() }
+                    presentationServer.addCustomSong(title, if (slides.isEmpty()) listOf(text.trim()) else slides)
+                }
+            }
+            "update_style" -> {
+                val fontSize = cmdJson.optInt("fontSize", presentationServer.state.value.fontSizeSp)
+                val posStr = cmdJson.optString("position")
+                val pos = when (posStr.uppercase()) {
+                    "LOWER_THIRD" -> TextDisplayPosition.LOWER_THIRD
+                    "TOP" -> TextDisplayPosition.TOP_BANNER
+                    "BOTTOM" -> TextDisplayPosition.BOTTOM_CENTER
+                    "LEFT" -> TextDisplayPosition.LEFT_CENTER
+                    else -> TextDisplayPosition.CENTER
+                }
+                val alignStr = cmdJson.optString("align")
+                val align = when (alignStr.uppercase()) {
+                    "LEFT" -> TextAlignmentOption.LEFT
+                    "RIGHT" -> TextAlignmentOption.RIGHT
+                    else -> TextAlignmentOption.CENTER
+                }
+                val colorHex = cmdJson.optString("color", "#FFFFFF")
+                val colorLong = try {
+                    android.graphics.Color.parseColor(colorHex).toLong() and 0xFFFFFFFFL
+                } catch (_: Throwable) {
+                    0xFFFFFFFFL
+                }
+                val bold = cmdJson.optBoolean("isBold", presentationServer.state.value.isTextBold)
+                val shadow = cmdJson.optBoolean("isShadow", presentationServer.state.value.isTextShadowEnabled)
+                val alpha = cmdJson.optDouble("alpha", presentationServer.state.value.textBackgroundAlpha.toDouble()).toFloat()
+                presentationServer.updateLiveTextSettings(
+                    fontSizeSp = fontSize,
+                    textPosition = pos,
+                    textColorRgb = colorLong,
+                    textAlignment = align,
+                    textBackgroundAlpha = alpha,
+                    isTextBold = bold,
+                    isTextShadowEnabled = shadow
+                )
+            }
+            "set_preset" -> {
+                val presetStr = cmdJson.optString("preset")
+                when (presetStr.uppercase()) {
+                    "WORSHIP" -> presentationServer.setStylePreset(LyricsStylePreset.WORSHIP)
+                    "PRAISE", "MODERN" -> presentationServer.setStylePreset(LyricsStylePreset.MODERN)
+                    "SERMON", "CLASSIC" -> presentationServer.setStylePreset(LyricsStylePreset.CLASSIC)
+                    "MINIMALIST", "MINIMAL" -> presentationServer.setStylePreset(LyricsStylePreset.MINIMAL)
+                }
+            }
+        }
+        broadcastCurrentState()
     }
 
     private fun sendHttpResponse(
@@ -522,12 +704,14 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             var mediaUrl = ""
             var totalSlides = 0
             var slideIndex = state.currentSlideIndex
+            val slidesArray = JSONArray()
 
             when (val content = state.currentContent) {
                 is LyricsContent -> {
                     contentType = "LYRICS"
                     title = content.title
                     totalSlides = content.slides.size
+                    content.slides.forEach { slidesArray.put(it) }
                     if (content.slides.isNotEmpty()) {
                         val index = slideIndex.coerceIn(0, content.slides.size - 1)
                         text = content.slides[index]
@@ -537,6 +721,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     contentType = "BIBLE"
                     title = content.title
                     totalSlides = content.verses.size
+                    content.verses.forEach { slidesArray.put(it) }
                     if (content.verses.isNotEmpty()) {
                         val index = slideIndex.coerceIn(0, content.verses.size - 1)
                         text = content.verses[index]
@@ -546,16 +731,21 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     contentType = "IMAGE"
                     title = content.title
                     mediaUrl = formatMediaUrl(content.uri)
+                    slidesArray.put(content.title)
+                    totalSlides = 1
                 }
                 is VideoContent -> {
                     contentType = "VIDEO"
                     title = content.title
                     mediaUrl = formatMediaUrl(content.uri)
+                    slidesArray.put(content.title)
+                    totalSlides = 1
                 }
                 is PowerPointContent -> {
                     contentType = "POWERPOINT"
                     title = content.title
                     totalSlides = content.slides.size
+                    content.slides.forEachIndexed { i, _ -> slidesArray.put("Slide ${i + 1}") }
                     if (content.slides.isNotEmpty()) {
                         val index = slideIndex.coerceIn(0, content.slides.size - 1)
                         mediaUrl = formatMediaUrl(content.slides[index])
@@ -565,22 +755,34 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     contentType = "IP_CAMERA"
                     title = content.title
                     mediaUrl = content.streamUrl
+                    slidesArray.put(content.title)
+                    totalSlides = 1
                 }
                 is CameraContent -> {
                     contentType = "CAMERA"
                     title = content.title
                     mediaUrl = "/camera/stream"
+                    slidesArray.put(content.title)
+                    totalSlides = 1
                 }
                 null -> {
                     contentType = "NONE"
                 }
             }
 
+            // Next Slide Text Preview (Confidence Monitor)
+            var nextText = ""
+            if (slideIndex + 1 < totalSlides && slidesArray.length() > slideIndex + 1) {
+                nextText = slidesArray.optString(slideIndex + 1, "")
+            }
+
             json.put("contentType", contentType)
             json.put("text", text)
+            json.put("nextText", nextText)
             json.put("title", title)
             json.put("slideIndex", slideIndex)
             json.put("totalSlides", totalSlides)
+            json.put("slides", slidesArray)
             json.put("mediaUrl", mediaUrl)
             
             // Background Configuration
@@ -643,6 +845,10 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         } catch (e: Throwable) {
             Log.e("PresentationWebServer", "Error stopping web server", e)
         }
+    }
+
+    private fun getWebRemoteHtml(): String {
+        return WebRemoteHtmlBuilder.buildHtml()
     }
 
     private fun getPresentationViewerHtml(): String {
@@ -916,6 +1122,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
     <!-- Status & Fullscreen toggle -->
     <div id="status-bar">
+        <a href="/remote" target="_blank" class="fs-btn" style="text-decoration:none;">📱 Remote Control</a>
         <button class="fs-btn" onclick="toggleFullScreen()">Fullscreen (F11)</button>
         <div id="status-indicator" class="status-dot" title="Koneksi Live Server"></div>
     </div>
@@ -949,7 +1156,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             try {
                 ws = new WebSocket(wsUrl);
             } catch (e) {
-                console.warn("WebSocket init error:", e);
                 startPolling();
                 return;
             }
@@ -965,9 +1171,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 try {
                     const state = JSON.parse(event.data);
                     renderPresentation(state);
-                } catch (err) {
-                    console.error("Error parsing live state:", err);
-                }
+                } catch (err) {}
             };
 
             ws.onclose = function() {
@@ -1079,7 +1283,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 mediaImage.style.display = 'block';
                 mediaPpt.style.display = 'none';
                 mediaVideo.style.display = 'none';
-                mediaVideo.pause();
             } else if (status === 'POWERPOINT' && mediaUrl) {
                 hasActiveMedia = true;
                 if (mediaPpt.src !== mediaUrl && !mediaPpt.src.endsWith(mediaUrl)) {

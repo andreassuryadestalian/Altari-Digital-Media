@@ -35,8 +35,6 @@ import com.example.features.lyrics.LyricsManagementScreen
 import com.example.features.media.MediaManagementScreen
 import com.example.features.playlist.PlaylistManagementScreen
 import com.example.features.powerpoint.PowerPointManagementScreen
-import com.example.features.remote.RemoteControlScreen
-import com.example.features.remote.RemoteServerEngine
 import com.example.features.settings.SettingsScreen
 import com.example.model.*
 import com.example.presentation.BackgroundType
@@ -63,7 +61,6 @@ enum class NavigationTab(val label: String, val icon: String) {
     POWERPOINT("SLIDES", "📊"),
     MEDIA("MEDIA", "🎥"),
     PLAYLIST("SERVICE ORDER", "📋"),
-    REMOTE("REMOTE", "📱"),
     SETTINGS("SETTINGS", "⚙️")
 }
 
@@ -72,7 +69,6 @@ fun DashboardScreen(server: PresentationServer) {
     val presentationState by server.state.collectAsState()
     var selectedTab by remember { mutableStateOf(NavigationTab.DASHBOARD) }
 
-    val remoteEngine = remember { RemoteServerEngine(server) }
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -331,9 +327,6 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     }
                 )
-            }
-            NavigationTab.REMOTE -> {
-                RemoteControlScreen(remoteEngine = remoteEngine)
             }
             NavigationTab.SETTINGS -> {
                 SettingsScreen(

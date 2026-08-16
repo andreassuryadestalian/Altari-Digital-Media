@@ -1055,9 +1055,83 @@ fun LiveServerStatusCard(server: PresentationServer) {
                 }
             }
 
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 3. WEB REMOTE CONTROLLER
+            val remoteUrl = if (info != null && info.wifiIps.isNotEmpty()) "http://${info.wifiIps.first()}:$port/remote" else "$localUrl/remote"
+            Surface(
+                color = Color(0xFF1E293B),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("📱", fontSize = 16.sp)
+                            Text("3. Web Remote Controller (Kontrol Jarak Jauh):", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        Surface(color = Color(0xFF10B981), shape = RoundedCornerShape(4.dp)) {
+                            Text("WEB REMOTE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    Text(
+                        text = remoteUrl,
+                        color = Color(0xFF34D399),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Text(
+                        text = "Buka link ini di browser HP/tablet/laptop apa saja untuk mengontrol slide (Next, Prev, Blackout, Clear) secara nirkabel via Wi-Fi!",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(remoteUrl)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Throwable) {
+                                    Toast.makeText(context, "Gagal membuka browser: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("🚀 Buka Web Remote", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                        
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(remoteUrl))
+                                Toast.makeText(context, "URL Web Remote disalin!", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) {
+                            Text("📋 Salin Link Remote", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
             if (info != null && info.hotspotIps.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(10.dp))
-                // 3. HOTSPOT HP (TETHERING)
+                // 4. HOTSPOT HP (TETHERING)
                 Surface(
                     color = Color(0xFF2D283E),
                     shape = RoundedCornerShape(8.dp),
@@ -1066,7 +1140,7 @@ fun LiveServerStatusCard(server: PresentationServer) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("📡", fontSize = 16.sp)
-                            Text("3. Hotspot HP (Tethering):", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("4. Hotspot HP (Tethering):", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(text = hotspotUrl, color = Color(0xFFFACC15), fontSize = 16.sp, fontWeight = FontWeight.Bold)
