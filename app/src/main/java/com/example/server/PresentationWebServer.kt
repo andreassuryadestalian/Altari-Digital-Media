@@ -153,7 +153,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             val query = if (questionIdx >= 0) fullUri.substring(questionIdx + 1) else ""
 
             val isUpgrade = headers["upgrade"]?.equals("websocket", ignoreCase = true) == true
-            val isWebSocket = path.startsWith("/ws") || (path == "/" && isUpgrade) || (path == "/remote" && isUpgrade)
+            val isWebSocket = path.startsWith("/ws") || isUpgrade
 
             if (isWebSocket && isUpgrade) {
                 val clientKey = headers["sec-websocket-key"]
@@ -182,40 +182,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     path == "/api/state" -> {
                         val json = buildStateJson()
                         sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
-                        socket.close()
-                    }
-                    path == "/api/library" -> {
-                        val json = presentationServer.buildLibraryJson().toString()
-                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
-                        socket.close()
-                    }
-                    path == "/api/remote" -> {
-                        val cmdJson = JSONObject()
-                        if (query.isNotEmpty()) {
-                            val params = query.split("&")
-                            for (p in params) {
-                                val idx = p.indexOf("=")
-                                if (idx > 0) {
-                                    val key = p.substring(0, idx)
-                                    val v = try { URLDecoder.decode(p.substring(idx + 1), "UTF-8") } catch (_: Throwable) { p.substring(idx + 1) }
-                                    when (key) {
-                                        "slide", "fontSize", "verse" -> cmdJson.put(key, v.toIntOrNull() ?: 0)
-                                        "isBold", "isShadow" -> cmdJson.put(key, v.toBoolean())
-                                        "alpha" -> cmdJson.put(key, v.toDoubleOrNull() ?: 0.0)
-                                        else -> cmdJson.put(key, v)
-                                    }
-                                }
-                            }
-                        }
-                        executeRemoteCommand(cmdJson)
-                        val json = buildStateJson()
-                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
-                        socket.close()
-                    }
-                    path == "/remote" -> {
-                        // Serve Web Remote Controller HTML
-                        val html = getWebRemoteHtml()
-                        sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
                         socket.close()
                     }
                     path == "/camera/stream" -> {
@@ -847,10 +813,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         }
     }
 
-    private fun getWebRemoteHtml(): String {
-        return WebRemoteHtmlBuilder.buildHtml()
-    }
-
     private fun getPresentationViewerHtml(): String {
         return """<!DOCTYPE html>
 <html lang="id">
@@ -1122,7 +1084,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
     <!-- Status & Fullscreen toggle -->
     <div id="status-bar">
-        <a href="/remote" target="_blank" class="fs-btn" style="text-decoration:none;">📱 Remote Control</a>
         <button class="fs-btn" onclick="toggleFullScreen()">Fullscreen (F11)</button>
         <div id="status-indicator" class="status-dot" title="Koneksi Live Server"></div>
     </div>

@@ -85,7 +85,7 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         webServer.start(context)
     }
 
-    override fun go(content: PresentationContent) {
+    fun goSlide(content: PresentationContent, slideIndex: Int = 0) {
         val newStatus = when (content) {
             is LyricsContent -> PresentationStatus.LYRICS
             is BibleContent -> PresentationStatus.BIBLE
@@ -96,14 +96,26 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
             is PowerPointContent -> PresentationStatus.POWERPOINT
         }
 
+        val maxIndex = when (content) {
+            is LyricsContent -> content.slides.size - 1
+            is BibleContent -> content.verses.size - 1
+            is PowerPointContent -> content.slides.size - 1
+            else -> 0
+        }
+        val clamped = if (maxIndex >= 0) slideIndex.coerceIn(0, maxIndex) else 0
+
         _state.update {
             it.copy(
                 currentContent = content,
-                currentSlideIndex = 0,
+                currentSlideIndex = clamped,
                 status = newStatus,
                 isVideoPlaying = true
             )
         }
+    }
+
+    override fun go(content: PresentationContent) {
+        goSlide(content, 0)
     }
 
     fun setSlideIndex(index: Int) {

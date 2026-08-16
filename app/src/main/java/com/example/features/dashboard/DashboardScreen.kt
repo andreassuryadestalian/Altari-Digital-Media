@@ -187,8 +187,7 @@ fun DashboardScreen(server: PresentationServer) {
                         onSelectPreviewSlide = { previewSlideIndex = it },
                         onGoLive = {
                             previewContent?.let { content ->
-                                server.go(content)
-                                server.setSlideIndex(previewSlideIndex)
+                                server.goSlide(content, previewSlideIndex)
                             }
                         }
                     )
@@ -211,8 +210,7 @@ fun DashboardScreen(server: PresentationServer) {
                         onSelectPreviewSlide = { previewSlideIndex = it },
                         onGoLive = {
                             previewContent?.let { content ->
-                                server.go(content)
-                                server.setSlideIndex(previewSlideIndex)
+                                server.goSlide(content, previewSlideIndex)
                             }
                         }
                     )
@@ -410,7 +408,7 @@ fun TopBar(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text("CHURCH PRESENTATION SYSTEM", color = TextMain, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("LIVE WEB: http://$localIp:$port | REMOTE: /remote", color = EmeraldLight, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Text("LIVE WEB DISPLAY: http://$localIp:$port", color = EmeraldLight, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
 
@@ -966,7 +964,8 @@ fun LandscapeOperatorConsole(
                     ) {
                         itemsIndexed(content.slides) { idx, slide ->
                             val isPreviewed = idx == previewSlideIndex && content.id == previewContent.id
-                            val isLiveSlide = idx == presentationState.currentSlideIndex && content.id == presentationState.currentContent?.id
+                            val isLiveContent = content.id == presentationState.currentContent?.id
+                            val isLiveSlide = idx == presentationState.currentSlideIndex && isLiveContent
 
                             Box(
                                 modifier = Modifier
@@ -990,7 +989,7 @@ fun LandscapeOperatorConsole(
                                     )
                                     .clickable {
                                         onSelectPreviewSlide(idx)
-                                        if (isLiveSlide) {
+                                        if (isLiveContent) {
                                             server.setSlideIndex(idx)
                                         }
                                     }
@@ -1030,7 +1029,8 @@ fun LandscapeOperatorConsole(
                     ) {
                         itemsIndexed(content.verses) { idx, verse ->
                             val isPreviewed = idx == previewSlideIndex && content.id == previewContent.id
-                            val isLiveVerse = idx == presentationState.currentSlideIndex && content.id == presentationState.currentContent?.id
+                            val isLiveContent = content.id == presentationState.currentContent?.id
+                            val isLiveVerse = idx == presentationState.currentSlideIndex && isLiveContent
 
                             Box(
                                 modifier = Modifier
@@ -1054,7 +1054,7 @@ fun LandscapeOperatorConsole(
                                     )
                                     .clickable {
                                         onSelectPreviewSlide(idx)
-                                        if (isLiveVerse) {
+                                        if (isLiveContent) {
                                             server.setSlideIndex(idx)
                                         }
                                     }
@@ -1485,48 +1485,122 @@ fun PortraitOperatorConsole(
 
                     val content = previewContent
                     if (content is LyricsContent) {
+                        val isLiveContent = content.id == presentationState.currentContent?.id
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(content.slides) { idx, slide ->
                                 val isSelected = idx == previewSlideIndex
+                                val isLiveSlide = idx == presentationState.currentSlideIndex && isLiveContent
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onSelectPreviewSlide(idx) }
-                                        .background(if (isSelected) PrimaryDark else Color.Black.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                                        .border(1.dp, if (isSelected) Primary else Color.Transparent, RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            onSelectPreviewSlide(idx)
+                                            if (isLiveContent) {
+                                                server.setSlideIndex(idx)
+                                            }
+                                        }
+                                        .background(
+                                            when {
+                                                isLiveSlide -> Color(0xFF064E3B)
+                                                isSelected -> PrimaryDark
+                                                else -> Color.Black.copy(alpha = 0.3f)
+                                            },
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            when {
+                                                isLiveSlide -> Emerald
+                                                isSelected -> Primary
+                                                else -> Color.Transparent
+                                            },
+                                            RoundedCornerShape(4.dp)
+                                        )
                                         .padding(8.dp)
                                 ) {
-                                    Text(
-                                        text = slide,
-                                        color = if (isSelected) Color.White else Color.LightGray,
-                                        fontSize = 12.sp
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = slide,
+                                            color = if (isLiveSlide || isSelected) Color.White else Color.LightGray,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isLiveSlide) {
+                                            Text(
+                                                text = "LIVE",
+                                                color = Emerald,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     } else if (content is BibleContent) {
+                        val isLiveContent = content.id == presentationState.currentContent?.id
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(content.verses) { idx, verse ->
                                 val isSelected = idx == previewSlideIndex
+                                val isLiveVerse = idx == presentationState.currentSlideIndex && isLiveContent
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onSelectPreviewSlide(idx) }
-                                        .background(if (isSelected) PrimaryDark else Color.Black.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                                        .border(1.dp, if (isSelected) Primary else Color.Transparent, RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            onSelectPreviewSlide(idx)
+                                            if (isLiveContent) {
+                                                server.setSlideIndex(idx)
+                                            }
+                                        }
+                                        .background(
+                                            when {
+                                                isLiveVerse -> Color(0xFF064E3B)
+                                                isSelected -> PrimaryDark
+                                                else -> Color.Black.copy(alpha = 0.3f)
+                                            },
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            when {
+                                                isLiveVerse -> Emerald
+                                                isSelected -> Primary
+                                                else -> Color.Transparent
+                                            },
+                                            RoundedCornerShape(4.dp)
+                                        )
                                         .padding(8.dp)
                                 ) {
-                                    Text(
-                                        text = verse,
-                                        color = if (isSelected) Color.White else Color.LightGray,
-                                        fontSize = 12.sp
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = verse,
+                                            color = if (isLiveVerse || isSelected) Color.White else Color.LightGray,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (isLiveVerse) {
+                                            Text(
+                                                text = "LIVE",
+                                                color = Emerald,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(start = 4.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
