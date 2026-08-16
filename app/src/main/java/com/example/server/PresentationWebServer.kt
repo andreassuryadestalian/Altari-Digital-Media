@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.util.Log
+import com.example.features.camera.CameraStreamManager
 import com.example.model.*
 import com.example.presentation.BackgroundType
 import com.example.presentation.PresentationServer
@@ -93,7 +94,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             while (isRunning && !ss.isClosed) {
                 try {
                     val clientSocket = ss.accept()
-                    clientSocket.soTimeout = 0 // Keep alive for WebSocket
+                    clientSocket.soTimeout = 0 // Keep alive for WebSocket / MJPEG
                     clientSocket.tcpNoDelay = true
                     
                     scope.launch {
@@ -171,14 +172,21 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 when {
                     path == "/ping" -> {
                         sendHttpResponse(output, 200, "OK", "OK".toByteArray(), "text/plain")
+                        socket.close()
                     }
                     path == "/health" -> {
                         val json = "{\"status\":\"ok\",\"port\":$activePort}"
                         sendHttpResponse(output, 200, "OK", json.toByteArray(), "application/json")
+                        socket.close()
                     }
                     path == "/api/state" -> {
                         val json = buildStateJson()
                         sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
+                        socket.close()
+                    }
+                    path == "/camera/stream" -> {
+                        serveCameraStream(socket, output)
+                        // Stream keeps running until socket closes
                     }
                     path == "/media" -> {
                         val uriParam = extractQueryParam(query, "uri")
@@ -187,23 +195,57 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         } else {
                             sendHttpResponse(output, 400, "Bad Request", "Missing uri parameter".toByteArray(), "text/plain")
                         }
+                        socket.close()
                     }
                     path == "/favicon.ico" -> {
                         sendHttpResponse(output, 204, "No Content", ByteArray(0), "image/x-icon")
+                        socket.close()
                     }
                     else -> {
                         // Serve Live Presentation HTML
                         val html = getPresentationViewerHtml()
                         sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
+                        socket.close()
                     }
                 }
-                socket.close()
             }
         } catch (e: Throwable) {
             Log.d("PresentationWebServer", "Client handled: ${e.message}")
         } finally {
             wsClients.remove(socket)
             try { socket.close() } catch (_: Throwable) {}
+        }
+    }
+
+    private suspend fun serveCameraStream(socket: Socket, output: OutputStream) = withContext(Dispatchers.IO) {
+        try {
+            val responseHeader = StringBuilder()
+                .append("HTTP/1.1 200 OK\r\n")
+                .append("Content-Type: multipart/x-mixed-replace; boundary=frame\r\n")
+                .append("Cache-Control: no-cache, no-store, must-revalidate\r\n")
+                .append("Pragma: no-cache\r\n")
+                .append("Access-Control-Allow-Origin: *\r\n")
+                .append("Connection: close\r\n\r\n")
+                .toString()
+
+            output.write(responseHeader.toByteArray(Charsets.US_ASCII))
+            output.flush()
+
+            while (isRunning && !socket.isClosed) {
+                val frame = CameraStreamManager.latestFrame.value
+                if (frame != null && frame.isNotEmpty()) {
+                    val frameHeader = "--frame\r\n" +
+                            "Content-Type: image/jpeg\r\n" +
+                            "Content-Length: ${frame.size}\r\n\r\n"
+                    output.write(frameHeader.toByteArray(Charsets.US_ASCII))
+                    output.write(frame)
+                    output.write("\r\n".toByteArray(Charsets.US_ASCII))
+                    output.flush()
+                }
+                delay(40) // ~25 FPS
+            }
+        } catch (_: Throwable) {
+            // Client closed connection
         }
     }
 
@@ -527,6 +569,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 is CameraContent -> {
                     contentType = "CAMERA"
                     title = content.title
+                    mediaUrl = "/camera/stream"
                 }
                 null -> {
                     contentType = "NONE"
@@ -544,7 +587,9 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("backgroundType", state.backgroundType.name)
             val bgMediaUrl = when (state.backgroundType) {
                 BackgroundType.IMAGE -> formatMediaUrl(state.backgroundImageUri)
-                BackgroundType.VIDEO, BackgroundType.IP_CAMERA -> formatMediaUrl(state.backgroundVideoUri)
+                BackgroundType.VIDEO -> formatMediaUrl(state.backgroundVideoUri)
+                BackgroundType.IP_CAMERA -> state.backgroundVideoUri ?: ""
+                BackgroundType.CAMERA -> "/camera/stream"
                 else -> ""
             }
             json.put("backgroundMediaUrl", bgMediaUrl)
@@ -662,7 +707,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             display: none;
         }
 
-        /* LAYER 2: Media Presentation Layer (Images, Videos, PowerPoint Slides) */
+        /* LAYER 2: Media Presentation Layer (Images, Videos, PowerPoint Slides, Live Camera) */
         #media-layer {
             position: absolute;
             top: 0;
@@ -982,14 +1027,22 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             const bgType = data.backgroundType || 'NONE';
             const bgUrl = data.backgroundMediaUrl || '';
 
-            if (bgType === 'IMAGE' && bgUrl) {
+            if ((bgType === 'IMAGE' || bgType === 'CAMERA') && bgUrl) {
                 if (bgImage.src !== bgUrl && !bgImage.src.endsWith(bgUrl)) {
                     bgImage.src = bgUrl;
                 }
                 bgImage.style.display = 'block';
                 bgVideo.style.display = 'none';
                 bgVideo.pause();
-            } else if ((bgType === 'VIDEO' || bgType === 'IP_CAMERA') && bgUrl) {
+            } else if (bgType === 'IP_CAMERA' && bgUrl) {
+                // IP Camera (DroidCam) stream is MJPEG
+                if (bgImage.src !== bgUrl && !bgImage.src.endsWith(bgUrl)) {
+                    bgImage.src = bgUrl;
+                }
+                bgImage.style.display = 'block';
+                bgVideo.style.display = 'none';
+                bgVideo.pause();
+            } else if (bgType === 'VIDEO' && bgUrl) {
                 if (bgVideo.src !== bgUrl && !bgVideo.src.endsWith(bgUrl)) {
                     bgVideo.src = bgUrl;
                     bgVideo.play().catch(() => {});
@@ -1009,7 +1062,16 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
             let hasActiveMedia = false;
 
-            if (status === 'IMAGE' && mediaUrl) {
+            if ((status === 'IMAGE' || status === 'CAMERA') && mediaUrl) {
+                hasActiveMedia = true;
+                if (mediaImage.src !== mediaUrl && !mediaImage.src.endsWith(mediaUrl)) {
+                    mediaImage.src = mediaUrl;
+                }
+                mediaImage.style.display = 'block';
+                mediaPpt.style.display = 'none';
+                mediaVideo.style.display = 'none';
+                mediaVideo.pause();
+            } else if (status === 'IP_CAMERA' && mediaUrl) {
                 hasActiveMedia = true;
                 if (mediaImage.src !== mediaUrl && !mediaImage.src.endsWith(mediaUrl)) {
                     mediaImage.src = mediaUrl;
@@ -1036,14 +1098,6 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 mediaVideo.style.display = 'block';
                 mediaImage.style.display = 'none';
                 mediaPpt.style.display = 'none';
-            } else if (status === 'IP_CAMERA' && mediaUrl) {
-                hasActiveMedia = true;
-                if (mediaImage.src !== mediaUrl && !mediaImage.src.endsWith(mediaUrl)) {
-                    mediaImage.src = mediaUrl;
-                }
-                mediaImage.style.display = 'block';
-                mediaPpt.style.display = 'none';
-                mediaVideo.style.display = 'none';
             } else {
                 mediaImage.style.display = 'none';
                 mediaPpt.style.display = 'none';

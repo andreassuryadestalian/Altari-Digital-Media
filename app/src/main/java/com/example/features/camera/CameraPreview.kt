@@ -1,6 +1,7 @@
 package com.example.features.camera
 
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import java.util.concurrent.Executors
 
 @Composable
 fun CameraPreview(
@@ -27,6 +29,13 @@ fun CameraPreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var cameraStateMessage by remember { mutableStateOf<String?>(null) }
+    val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cameraExecutor.shutdown()
+        }
+    }
 
     if (cameraStateMessage != null) {
         Box(
@@ -57,6 +66,23 @@ fun CameraPreview(
                         val preview = Preview.Builder().build().also {
                             it.setSurfaceProvider(previewView.surfaceProvider)
                         }
+
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                            .build()
+
+                        imageAnalysis.setAnalyzer(cameraExecutor) { imageProxy ->
+                            try {
+                                val bitmap = imageProxy.toBitmap()
+                                CameraStreamManager.onNewFrame(bitmap, imageProxy.imageInfo.rotationDegrees)
+                            } catch (e: Throwable) {
+                                e.printStackTrace()
+                            } finally {
+                                imageProxy.close()
+                            }
+                        }
+
                         val cameraSelector = if (useFrontCamera) {
                             CameraSelector.DEFAULT_FRONT_CAMERA
                         } else {
@@ -67,7 +93,8 @@ fun CameraPreview(
                         cameraProvider.bindToLifecycle(
                             lifecycleOwner,
                             cameraSelector,
-                            preview
+                            preview,
+                            imageAnalysis
                         )
                     } catch (e: Throwable) {
                         cameraStateMessage = "Camera Error / Permission Required: ${e.localizedMessage}"
