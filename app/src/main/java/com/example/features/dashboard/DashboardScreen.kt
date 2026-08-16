@@ -269,6 +269,12 @@ fun DashboardScreen(server: PresentationServer) {
                 MediaManagementScreen(
                     mediaList = mediaLibrary,
                     onAddMedia = { mediaLibrary.add(it) },
+                    onDeleteMedia = { item ->
+                        mediaLibrary.remove(item)
+                        if (previewContent?.id == item.id) {
+                            previewContent = null
+                        }
+                    },
                     onSelectForPreview = {
                         previewContent = it
                         selectedTab = NavigationTab.DASHBOARD
