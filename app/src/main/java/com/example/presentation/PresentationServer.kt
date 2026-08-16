@@ -248,7 +248,15 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         textAlignment: TextAlignmentOption = _state.value.textAlignment,
         textBackgroundAlpha: Float = _state.value.textBackgroundAlpha,
         isTextBold: Boolean = _state.value.isTextBold,
-        isTextShadowEnabled: Boolean = _state.value.isTextShadowEnabled
+        isTextShadowEnabled: Boolean = _state.value.isTextShadowEnabled,
+        textVerticalPercent: Int = _state.value.textVerticalPercent,
+        textHorizontalPercent: Int = _state.value.textHorizontalPercent,
+        textBoxWidthPercent: Int = _state.value.textBoxWidthPercent,
+        textBoxCornerRadiusDp: Int = _state.value.textBoxCornerRadiusDp,
+        textBoxPaddingDp: Int = _state.value.textBoxPaddingDp,
+        textLineHeightMultiplier: Float = _state.value.textLineHeightMultiplier,
+        isTextUppercase: Boolean = _state.value.isTextUppercase,
+        textBoxBorderEnabled: Boolean = _state.value.textBoxBorderEnabled
     ) {
         _state.update {
             it.copy(
@@ -258,10 +266,41 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
                 textAlignment = textAlignment,
                 textBackgroundAlpha = textBackgroundAlpha,
                 isTextBold = isTextBold,
-                isTextShadowEnabled = isTextShadowEnabled
+                isTextShadowEnabled = isTextShadowEnabled,
+                textVerticalPercent = textVerticalPercent,
+                textHorizontalPercent = textHorizontalPercent,
+                textBoxWidthPercent = textBoxWidthPercent,
+                textBoxCornerRadiusDp = textBoxCornerRadiusDp,
+                textBoxPaddingDp = textBoxPaddingDp,
+                textLineHeightMultiplier = textLineHeightMultiplier,
+                isTextUppercase = isTextUppercase,
+                textBoxBorderEnabled = textBoxBorderEnabled
             )
         }
     }
+
+    fun updateSplitScreenSettings(
+        isEnabled: Boolean = _state.value.isSplitScreenEnabled,
+        ratioCamPercent: Int = _state.value.splitRatioCamPercent,
+        side: SplitScreenSide = _state.value.splitScreenSide,
+        cameraStreamUrl: String? = _state.value.splitCameraStreamUrl,
+        sourceType: BackgroundType = _state.value.splitCameraSourceType
+    ) {
+        _state.update {
+            it.copy(
+                isSplitScreenEnabled = isEnabled,
+                splitRatioCamPercent = ratioCamPercent.coerceIn(15, 85),
+                splitScreenSide = side,
+                splitCameraStreamUrl = cameraStreamUrl,
+                splitCameraSourceType = sourceType
+            )
+        }
+    }
+
+    fun toggleSplitScreen() {
+        _state.update { it.copy(isSplitScreenEnabled = !it.isSplitScreenEnabled) }
+    }
+
 
     fun toggleVideoPlayback() {
         _state.update { it.copy(isVideoPlaying = !it.isVideoPlaying) }

@@ -763,7 +763,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("backgroundMediaUrl", bgMediaUrl)
             json.put("isVideoPlaying", state.isVideoPlaying)
 
-            // Text Styles & Positioning
+            // Text Styles & Flexible Positioning
             json.put("fontSize", state.fontSizeSp)
             json.put("position", state.textPosition.name)
             
@@ -780,6 +780,25 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("bgAlpha", state.textBackgroundAlpha)
             json.put("isBold", state.isTextBold)
             json.put("isShadowEnabled", state.isTextShadowEnabled)
+            json.put("textVerticalPercent", state.textVerticalPercent)
+            json.put("textHorizontalPercent", state.textHorizontalPercent)
+            json.put("textBoxWidthPercent", state.textBoxWidthPercent)
+            json.put("textBoxCornerRadiusDp", state.textBoxCornerRadiusDp)
+            json.put("textBoxPaddingDp", state.textBoxPaddingDp)
+            json.put("textLineHeightMultiplier", state.textLineHeightMultiplier)
+            json.put("isTextUppercase", state.isTextUppercase)
+            json.put("textBoxBorderEnabled", state.textBoxBorderEnabled)
+
+            // Split Screen Feature
+            json.put("isSplitScreenEnabled", state.isSplitScreenEnabled)
+            json.put("splitRatioCamPercent", state.splitRatioCamPercent)
+            json.put("splitScreenSide", state.splitScreenSide.name)
+            val splitCamUrl = when {
+                !state.splitCameraStreamUrl.isNullOrBlank() -> state.splitCameraStreamUrl
+                state.backgroundType == BackgroundType.IP_CAMERA && !state.backgroundVideoUri.isNullOrBlank() -> state.backgroundVideoUri
+                else -> "/camera/stream"
+            }
+            json.put("splitCameraStreamUrl", splitCamUrl)
             
             json.toString()
         } catch (e: Throwable) {
@@ -842,8 +861,101 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             background-color: #000000;
         }
 
+        /* DUAL SPLIT-SCREEN CONTAINER */
+        #split-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: row;
+            background-color: #05050A;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* Split Screen Panes */
+        .split-pane {
+            position: relative;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000000;
+            transition: width 0.3s ease;
+        }
+
+        #split-cam-pane {
+            background-color: #080811;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        #split-cam-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background-color: #05050A;
+        }
+
+        .cam-badge {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(220, 38, 38, 0.85);
+            backdrop-filter: blur(8px);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            z-index: 10;
+        }
+
+        .cam-badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background-color: #ffffff;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* Split Screen Divider */
+        #split-divider {
+            width: 3px;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(208,188,255,0.4) 0%, rgba(56,189,248,0.6) 50%, rgba(208,188,255,0.4) 100%);
+            box-shadow: 0 0 10px rgba(56,189,248,0.5);
+            z-index: 10;
+        }
+
+        #split-content-pane {
+            flex: 1;
+            position: relative;
+        }
+
+        /* NORMAL FULL-SCREEN CONTAINER */
+        #single-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
         /* LAYER 1: Background Layer */
-        #bg-layer {
+        .bg-layer {
             position: absolute;
             top: 0;
             left: 0;
@@ -855,7 +967,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             transition: opacity 0.3s ease;
         }
 
-        #bg-image {
+        .bg-image {
             position: absolute;
             top: 0;
             left: 0;
@@ -865,7 +977,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             display: none;
         }
 
-        #bg-video {
+        .bg-video {
             position: absolute;
             top: 0;
             left: 0;
@@ -876,7 +988,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         }
 
         /* LAYER 2: Media Presentation Layer (Images, Videos, PowerPoint Slides, Live Camera) */
-        #media-layer {
+        .media-layer {
             position: absolute;
             top: 0;
             left: 0;
@@ -889,7 +1001,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             pointer-events: none;
         }
 
-        #media-image, #media-ppt {
+        .media-image, .media-ppt {
             max-width: 100%;
             max-height: 100%;
             width: 100%;
@@ -898,7 +1010,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             display: none;
         }
 
-        #media-video {
+        .media-video {
             max-width: 100%;
             max-height: 100%;
             width: 100%;
@@ -908,45 +1020,41 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         }
 
         /* LAYER 3: Text / Lyrics / Bible Overlay Layer */
-        #overlay-layer {
+        .overlay-layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: 3;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 32px;
             pointer-events: none;
-            transition: all 0.25s ease-out;
         }
 
-        #text-box {
+        .text-box {
+            position: absolute;
             background-color: rgba(0, 0, 0, 0.45);
             border-radius: 12px;
             padding: 24px 36px;
             text-align: center;
-            max-width: 95%;
             transition: all 0.2s ease-in-out;
             display: none;
+            box-sizing: border-box;
         }
 
-        #title-badge {
+        .title-badge {
             display: inline-block;
             background-color: #D0BCFF;
             color: #381E72;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             padding: 4px 14px;
             border-radius: 6px;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
         }
 
-        #content-text {
+        .content-text {
             color: #ffffff;
             font-size: 38px;
             font-weight: 700;
@@ -1049,24 +1157,60 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         <!-- Blackout layer -->
         <div id="blackout-layer"></div>
 
-        <!-- Background layer -->
-        <div id="bg-layer">
-            <img id="bg-image" alt="Background">
-            <video id="bg-video" autoplay loop muted playsinline></video>
+        <!-- Normal Single Screen Container -->
+        <div id="single-container">
+            <div id="bg-layer" class="bg-layer">
+                <img id="bg-image" class="bg-image" alt="Background">
+                <video id="bg-video" class="bg-video" autoplay loop muted playsinline></video>
+            </div>
+
+            <div id="media-layer" class="media-layer">
+                <img id="media-image" class="media-image" alt="Presentation Image">
+                <img id="media-ppt" class="media-ppt" alt="PowerPoint Slide">
+                <video id="media-video" class="media-video" autoplay playsinline></video>
+            </div>
+
+            <div id="overlay-layer" class="overlay-layer">
+                <div id="text-box" class="text-box">
+                    <div id="title-badge" class="title-badge"></div>
+                    <div id="content-text" class="content-text"></div>
+                </div>
+            </div>
         </div>
 
-        <!-- Media presentation layer -->
-        <div id="media-layer">
-            <img id="media-image" alt="Presentation Image">
-            <img id="media-ppt" alt="PowerPoint Slide">
-            <video id="media-video" autoplay playsinline></video>
-        </div>
+        <!-- Split Screen Dual Container (30:70 / 70:30 Live Cam + Sermon Presentation) -->
+        <div id="split-container">
+            <!-- Cam Pane -->
+            <div id="split-cam-pane" class="split-pane">
+                <div class="cam-badge">
+                    <div class="cam-badge-dot"></div>
+                    <span>LIVE CAM</span>
+                </div>
+                <img id="split-cam-feed" alt="Live Camera Stream">
+            </div>
 
-        <!-- Lyrics & Bible overlay layer -->
-        <div id="overlay-layer">
-            <div id="text-box">
-                <div id="title-badge"></div>
-                <div id="content-text"></div>
+            <!-- Divider -->
+            <div id="split-divider"></div>
+
+            <!-- Material / Sermon / Lyrics Pane -->
+            <div id="split-content-pane" class="split-pane">
+                <div id="split-bg-layer" class="bg-layer">
+                    <img id="split-bg-image" class="bg-image" alt="Split Background">
+                    <video id="split-bg-video" class="bg-video" autoplay loop muted playsinline></video>
+                </div>
+
+                <div id="split-media-layer" class="media-layer">
+                    <img id="split-media-image" class="media-image" alt="Split Image">
+                    <img id="split-media-ppt" class="media-ppt" alt="Split PowerPoint">
+                    <video id="split-media-video" class="media-video" autoplay playsinline></video>
+                </div>
+
+                <div id="split-overlay-layer" class="overlay-layer">
+                    <div id="split-text-box" class="text-box">
+                        <div id="split-title-badge" class="title-badge"></div>
+                        <div id="split-content-text" class="content-text"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1090,18 +1234,32 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
     <script>
         const blackoutLayer = document.getElementById('blackout-layer');
-        const bgLayer = document.getElementById('bg-layer');
+        const singleContainer = document.getElementById('single-container');
+        const splitContainer = document.getElementById('split-container');
+        
+        const splitCamPane = document.getElementById('split-cam-pane');
+        const splitContentPane = document.getElementById('split-content-pane');
+        const splitCamFeed = document.getElementById('split-cam-feed');
+        
+        // Single elements
         const bgImage = document.getElementById('bg-image');
         const bgVideo = document.getElementById('bg-video');
-        
         const mediaImage = document.getElementById('media-image');
         const mediaPpt = document.getElementById('media-ppt');
         const mediaVideo = document.getElementById('media-video');
-        
-        const overlayLayer = document.getElementById('overlay-layer');
         const textBox = document.getElementById('text-box');
         const titleBadge = document.getElementById('title-badge');
         const contentText = document.getElementById('content-text');
+        
+        // Split elements
+        const splitBgImage = document.getElementById('split-bg-image');
+        const splitBgVideo = document.getElementById('split-bg-video');
+        const splitMediaImage = document.getElementById('split-media-image');
+        const splitMediaPpt = document.getElementById('split-media-ppt');
+        const splitMediaVideo = document.getElementById('split-media-video');
+        const splitTextBox = document.getElementById('split-text-box');
+        const splitTitleBadge = document.getElementById('split-title-badge');
+        const splitContentText = document.getElementById('split-content-text');
         
         const idleBanner = document.getElementById('idle-banner');
         const statusIndicator = document.getElementById('status-indicator');
@@ -1188,126 +1346,67 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 blackoutLayer.style.display = 'none';
             }
 
-            // 2. BACKGROUND LAYER
-            const bgType = data.backgroundType || 'NONE';
-            const bgUrl = data.backgroundMediaUrl || '';
-
-            if ((bgType === 'IMAGE' || bgType === 'CAMERA') && bgUrl) {
-                if (bgImage.src !== bgUrl && !bgImage.src.endsWith(bgUrl)) {
-                    bgImage.src = bgUrl;
-                }
-                bgImage.style.display = 'block';
-                bgVideo.style.display = 'none';
-                bgVideo.pause();
-            } else if (bgType === 'IP_CAMERA' && bgUrl) {
-                // IP Camera (DroidCam) stream is MJPEG
-                if (bgImage.src !== bgUrl && !bgImage.src.endsWith(bgUrl)) {
-                    bgImage.src = bgUrl;
-                }
-                bgImage.style.display = 'block';
-                bgVideo.style.display = 'none';
-                bgVideo.pause();
-            } else if (bgType === 'VIDEO' && bgUrl) {
-                if (bgVideo.src !== bgUrl && !bgVideo.src.endsWith(bgUrl)) {
-                    bgVideo.src = bgUrl;
-                    bgVideo.play().catch(() => {});
-                }
-                bgVideo.style.display = 'block';
-                bgImage.style.display = 'none';
-            } else {
-                bgImage.style.display = 'none';
-                bgVideo.style.display = 'none';
-                bgVideo.pause();
-            }
-
-            // 3. MEDIA CONTENT LAYER
-            const contentType = data.contentType || 'NONE';
-            const mediaUrl = data.mediaUrl || '';
-            const status = data.status || 'IDLE';
-
-            let hasActiveMedia = false;
-
-            if ((status === 'IMAGE' || status === 'CAMERA') && mediaUrl) {
-                hasActiveMedia = true;
-                if (mediaImage.src !== mediaUrl && !mediaImage.src.endsWith(mediaUrl)) {
-                    mediaImage.src = mediaUrl;
-                }
-                mediaImage.style.display = 'block';
-                mediaPpt.style.display = 'none';
-                mediaVideo.style.display = 'none';
-                mediaVideo.pause();
-            } else if (status === 'IP_CAMERA' && mediaUrl) {
-                hasActiveMedia = true;
-                if (mediaImage.src !== mediaUrl && !mediaImage.src.endsWith(mediaUrl)) {
-                    mediaImage.src = mediaUrl;
-                }
-                mediaImage.style.display = 'block';
-                mediaPpt.style.display = 'none';
-                mediaVideo.style.display = 'none';
-            } else if (status === 'POWERPOINT' && mediaUrl) {
-                hasActiveMedia = true;
-                if (mediaPpt.src !== mediaUrl && !mediaPpt.src.endsWith(mediaUrl)) {
-                    mediaPpt.src = mediaUrl;
-                }
-                mediaPpt.style.display = 'block';
-                mediaImage.style.display = 'none';
-                mediaVideo.style.display = 'none';
-                mediaVideo.pause();
-            } else if (status === 'VIDEO' && mediaUrl) {
-                hasActiveMedia = true;
-                if (mediaVideo.src !== mediaUrl && !mediaVideo.src.endsWith(mediaUrl)) {
-                    mediaVideo.src = mediaUrl;
-                    mediaVideo.play().catch(() => {});
-                }
-                mediaVideo.style.display = 'block';
-                mediaImage.style.display = 'none';
-                mediaPpt.style.display = 'none';
-            } else {
-                mediaImage.style.display = 'none';
-                mediaPpt.style.display = 'none';
-                mediaVideo.style.display = 'none';
-                mediaVideo.pause();
-            }
-
-            // 4. LYRICS / BIBLE TEXT OVERLAY LAYER
-            const hasText = Boolean(data.text && data.text.trim() !== '');
-            const isTextVisible = (status !== 'CLEAR') && hasText;
-
-            if (isTextVisible) {
-                textBox.style.display = 'block';
-                contentText.innerText = data.text;
-
-                if (data.title && data.title.trim() !== '') {
-                    titleBadge.style.display = 'inline-block';
-                    titleBadge.innerText = data.title;
-                } else {
-                    titleBadge.style.display = 'none';
-                }
-
-                // Apply text styling
-                contentText.style.fontSize = (data.fontSize || 38) + 'px';
-                contentText.style.color = data.textColor || '#ffffff';
-                contentText.style.textAlign = data.textAlign || 'center';
-                contentText.style.fontWeight = data.isBold ? 'bold' : 'normal';
+            const isSplit = Boolean(data.isSplitScreenEnabled);
+            
+            if (isSplit) {
+                singleContainer.style.display = 'none';
+                splitContainer.style.display = 'flex';
                 
-                if (data.isShadowEnabled) {
-                    contentText.style.textShadow = '2px 2px 8px rgba(0,0,0,0.9)';
+                // Configure Split Ratio & Side
+                const camRatio = data.splitRatioCamPercent || 30;
+                const side = data.splitScreenSide || 'CAM_LEFT_CONTENT_RIGHT';
+                
+                if (side === 'CAM_LEFT_CONTENT_RIGHT') {
+                    splitContainer.style.flexDirection = 'row';
+                    splitCamPane.style.width = camRatio + '%';
+                    splitContentPane.style.width = (100 - camRatio) + '%';
                 } else {
-                    contentText.style.textShadow = 'none';
+                    splitContainer.style.flexDirection = 'row-reverse';
+                    splitCamPane.style.width = camRatio + '%';
+                    splitContentPane.style.width = (100 - camRatio) + '%';
                 }
 
-                const bgAlpha = data.bgAlpha !== undefined ? data.bgAlpha : 0.45;
-                textBox.style.backgroundColor = 'rgba(0, 0, 0, ' + bgAlpha + ')';
+                // Split Camera Feed
+                const camUrl = data.splitCameraStreamUrl || '/camera/stream';
+                if (splitCamFeed.src !== camUrl && !splitCamFeed.src.endsWith(camUrl)) {
+                    splitCamFeed.src = camUrl;
+                }
 
-                // Positioning
-                applyPositioning(data.position || 'CENTER');
+                // Render Content inside Split Material Pane
+                renderLayers(data, {
+                    bgImage: splitBgImage,
+                    bgVideo: splitBgVideo,
+                    mediaImage: splitMediaImage,
+                    mediaPpt: splitMediaPpt,
+                    mediaVideo: splitMediaVideo,
+                    textBox: splitTextBox,
+                    titleBadge: splitTitleBadge,
+                    contentText: splitContentText
+                });
+
             } else {
-                textBox.style.display = 'none';
+                splitContainer.style.display = 'none';
+                singleContainer.style.display = 'block';
+                
+                renderLayers(data, {
+                    bgImage: bgImage,
+                    bgVideo: bgVideo,
+                    mediaImage: mediaImage,
+                    mediaPpt: mediaPpt,
+                    mediaVideo: mediaVideo,
+                    textBox: textBox,
+                    titleBadge: titleBadge,
+                    contentText: contentText
+                });
             }
 
-            // 5. STANDBY / IDLE BANNER
-            const hasAnyContent = hasActiveMedia || isTextVisible || (bgType !== 'NONE');
-            if (hasAnyContent || status === 'CLEAR') {
+            // Standby / Idle Banner
+            const hasText = Boolean(data.text && data.text.trim() !== '');
+            const hasActiveMedia = Boolean(data.mediaUrl && data.mediaUrl.trim() !== '');
+            const hasBg = Boolean(data.backgroundType && data.backgroundType !== 'NONE');
+            const isPresenting = isSplit || hasActiveMedia || (hasText && data.status !== 'CLEAR') || hasBg;
+            
+            if (isPresenting || data.status === 'CLEAR') {
                 idleBanner.style.opacity = '0';
                 setTimeout(() => {
                     if (idleBanner.style.opacity === '0') idleBanner.style.display = 'none';
@@ -1318,31 +1417,197 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             }
         }
 
-        function applyPositioning(pos) {
-            overlayLayer.style.justifyContent = 'center';
-            overlayLayer.style.alignItems = 'center';
-            overlayLayer.style.padding = '32px';
-            textBox.style.width = 'auto';
-            textBox.style.maxWidth = '95%';
+        function renderLayers(data, targets) {
+            // Background
+            const bgType = data.backgroundType || 'NONE';
+            const bgUrl = data.backgroundMediaUrl || '';
 
-            if (pos === 'LOWER_THIRD' || pos === 'BOTTOM_CENTER') {
-                overlayLayer.style.justifyContent = 'center';
-                overlayLayer.style.alignItems = 'flex-end';
-                overlayLayer.style.padding = '0 32px 36px 32px';
-                textBox.style.width = '100%';
-                textBox.style.maxWidth = '100%';
-            } else if (pos === 'TOP_BANNER') {
-                overlayLayer.style.justifyContent = 'center';
-                overlayLayer.style.alignItems = 'flex-start';
-                overlayLayer.style.padding = '36px 32px 0 32px';
-                textBox.style.width = '100%';
-                textBox.style.maxWidth = '100%';
-            } else if (pos === 'LEFT_CENTER') {
-                overlayLayer.style.justifyContent = 'flex-start';
-                overlayLayer.style.alignItems = 'center';
-                overlayLayer.style.padding = '32px';
-                textBox.style.width = '80%';
-                textBox.style.maxWidth = '80%';
+            if ((bgType === 'IMAGE' || bgType === 'CAMERA' || bgType === 'IP_CAMERA') && bgUrl) {
+                if (targets.bgImage.src !== bgUrl && !targets.bgImage.src.endsWith(bgUrl)) {
+                    targets.bgImage.src = bgUrl;
+                }
+                targets.bgImage.style.display = 'block';
+                targets.bgVideo.style.display = 'none';
+                targets.bgVideo.pause();
+            } else if (bgType === 'VIDEO' && bgUrl) {
+                if (targets.bgVideo.src !== bgUrl && !targets.bgVideo.src.endsWith(bgUrl)) {
+                    targets.bgVideo.src = bgUrl;
+                    targets.bgVideo.play().catch(() => {});
+                }
+                targets.bgVideo.style.display = 'block';
+                targets.bgImage.style.display = 'none';
+            } else {
+                targets.bgImage.style.display = 'none';
+                targets.bgVideo.style.display = 'none';
+                targets.bgVideo.pause();
+            }
+
+            // Media
+            const mediaUrl = data.mediaUrl || '';
+            const status = data.status || 'IDLE';
+
+            if ((status === 'IMAGE' || status === 'CAMERA' || status === 'IP_CAMERA') && mediaUrl) {
+                if (targets.mediaImage.src !== mediaUrl && !targets.mediaImage.src.endsWith(mediaUrl)) {
+                    targets.mediaImage.src = mediaUrl;
+                }
+                targets.mediaImage.style.display = 'block';
+                targets.mediaPpt.style.display = 'none';
+                targets.mediaVideo.style.display = 'none';
+                targets.mediaVideo.pause();
+            } else if (status === 'POWERPOINT' && mediaUrl) {
+                if (targets.mediaPpt.src !== mediaUrl && !targets.mediaPpt.src.endsWith(mediaUrl)) {
+                    targets.mediaPpt.src = mediaUrl;
+                }
+                targets.mediaPpt.style.display = 'block';
+                targets.mediaImage.style.display = 'none';
+                targets.mediaVideo.style.display = 'none';
+                targets.mediaVideo.pause();
+            } else if (status === 'VIDEO' && mediaUrl) {
+                if (targets.mediaVideo.src !== mediaUrl && !targets.mediaVideo.src.endsWith(mediaUrl)) {
+                    targets.mediaVideo.src = mediaUrl;
+                    targets.mediaVideo.play().catch(() => {});
+                }
+                targets.mediaVideo.style.display = 'block';
+                targets.mediaImage.style.display = 'none';
+                targets.mediaPpt.style.display = 'none';
+            } else {
+                targets.mediaImage.style.display = 'none';
+                targets.mediaPpt.style.display = 'none';
+                targets.mediaVideo.style.display = 'none';
+                targets.mediaVideo.pause();
+            }
+
+            // Text Overlay
+            const hasText = Boolean(data.text && data.text.trim() !== '');
+            const isTextVisible = (status !== 'CLEAR') && hasText;
+
+            if (isTextVisible) {
+                targets.textBox.style.display = 'block';
+                targets.contentText.innerText = data.text;
+
+                if (data.title && data.title.trim() !== '') {
+                    targets.titleBadge.style.display = 'inline-block';
+                    targets.titleBadge.innerText = data.title;
+                } else {
+                    targets.titleBadge.style.display = 'none';
+                }
+
+                // Typography & Formatting
+                targets.contentText.style.fontSize = (data.fontSize || 38) + 'px';
+                targets.contentText.style.color = data.textColor || '#ffffff';
+                targets.contentText.style.textAlign = data.textAlign || 'center';
+                targets.contentText.style.fontWeight = data.isBold ? 'bold' : 'normal';
+                targets.contentText.style.textTransform = data.isTextUppercase ? 'uppercase' : 'none';
+                targets.contentText.style.lineHeight = (data.textLineHeightMultiplier || 1.35);
+                
+                if (data.isShadowEnabled) {
+                    targets.contentText.style.textShadow = '2px 2px 8px rgba(0,0,0,0.95)';
+                } else {
+                    targets.contentText.style.textShadow = 'none';
+                }
+
+                const bgAlpha = data.bgAlpha !== undefined ? data.bgAlpha : 0.45;
+                targets.textBox.style.backgroundColor = 'rgba(0, 0, 0, ' + bgAlpha + ')';
+                targets.textBox.style.borderRadius = (data.textBoxCornerRadiusDp !== undefined ? data.textBoxCornerRadiusDp : 12) + 'px';
+                targets.textBox.style.padding = (data.textBoxPaddingDp !== undefined ? data.textBoxPaddingDp : 20) + 'px ' + ((data.textBoxPaddingDp || 20) + 12) + 'px';
+                
+                if (data.textBoxBorderEnabled) {
+                    targets.textBox.style.border = '1.5px solid rgba(208, 188, 255, 0.6)';
+                    targets.textBox.style.boxShadow = '0 0 15px rgba(208, 188, 255, 0.2)';
+                } else {
+                    targets.textBox.style.border = 'none';
+                    targets.textBox.style.boxShadow = 'none';
+                }
+
+                // Positioning
+                applyFlexibleTextPosition(targets.textBox, data);
+            } else {
+                targets.textBox.style.display = 'none';
+            }
+        }
+
+        function applyFlexibleTextPosition(box, data) {
+            const pos = data.position || 'CENTER';
+
+            // Reset positioning rules
+            box.style.top = 'auto';
+            box.style.bottom = 'auto';
+            box.style.left = 'auto';
+            box.style.right = 'auto';
+            box.style.transform = 'none';
+            box.style.width = 'auto';
+            box.style.maxWidth = '92%';
+
+            switch (pos) {
+                case 'CENTER':
+                    box.style.top = '50%';
+                    box.style.left = '50%';
+                    box.style.transform = 'translate(-50%, -50%)';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 90) + '%';
+                    break;
+                case 'LOWER_THIRD':
+                    box.style.bottom = '32px';
+                    box.style.left = '50%';
+                    box.style.transform = 'translateX(-50%)';
+                    box.style.width = (data.textBoxWidthPercent || 95) + '%';
+                    box.style.maxWidth = '98%';
+                    break;
+                case 'BOTTOM_CENTER':
+                    box.style.bottom = '36px';
+                    box.style.left = '50%';
+                    box.style.transform = 'translateX(-50%)';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 90) + '%';
+                    break;
+                case 'TOP_BANNER':
+                    box.style.top = '32px';
+                    box.style.left = '50%';
+                    box.style.transform = 'translateX(-50%)';
+                    box.style.width = (data.textBoxWidthPercent || 95) + '%';
+                    box.style.maxWidth = '98%';
+                    break;
+                case 'LEFT_CENTER':
+                    box.style.top = '50%';
+                    box.style.left = '36px';
+                    box.style.transform = 'translateY(-50%)';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'RIGHT_CENTER':
+                    box.style.top = '50%';
+                    box.style.right = '36px';
+                    box.style.transform = 'translateY(-50%)';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'TOP_LEFT':
+                    box.style.top = '32px';
+                    box.style.left = '36px';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'TOP_RIGHT':
+                    box.style.top = '32px';
+                    box.style.right = '36px';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'BOTTOM_LEFT':
+                    box.style.bottom = '32px';
+                    box.style.left = '36px';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'BOTTOM_RIGHT':
+                    box.style.bottom = '32px';
+                    box.style.right = '36px';
+                    box.style.maxWidth = (data.textBoxWidthPercent || 75) + '%';
+                    break;
+                case 'CUSTOM':
+                default:
+                    const vPct = (data.textVerticalPercent !== undefined) ? data.textVerticalPercent : 50;
+                    const hPct = (data.textHorizontalPercent !== undefined) ? data.textHorizontalPercent : 50;
+                    const wPct = (data.textBoxWidthPercent !== undefined) ? data.textBoxWidthPercent : 85;
+                    box.style.top = vPct + '%';
+                    box.style.left = hPct + '%';
+                    box.style.transform = 'translate(-50%, -50%)';
+                    box.style.width = wPct + '%';
+                    box.style.maxWidth = '98%';
+                    break;
             }
         }
 
@@ -1366,3 +1631,4 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 </html>"""
     }
 }
+

@@ -1,6 +1,7 @@
 package com.example.features.display
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -44,11 +45,134 @@ fun PresentationFrameRenderer(
     }
 
     if (profileType == DisplayProfileType.STAGE_MONITOR) {
-        // Specialized Stage Confidence Monitor layout for worship team/speaker
         StageMonitorRenderer(state = state, modifier = modifier)
         return
     }
 
+    if (state.isSplitScreenEnabled) {
+        // Dual Split Screen (30:70 / 70:30 Live Cam + Sermon Presentation)
+        val camWeight = (state.splitRatioCamPercent.coerceIn(15, 85) / 100f)
+        val contentWeight = 1f - camWeight
+
+        Row(
+            modifier = modifier
+                .fillMaxSize()
+                .background(Color(0xFF05050A))
+        ) {
+            if (state.splitScreenSide == com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT) {
+                // Live Cam on Left
+                Box(
+                    modifier = Modifier
+                        .weight(camWeight)
+                        .fillMaxHeight()
+                        .background(Color.Black)
+                ) {
+                    SplitCameraFeedView(state)
+                }
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
+                )
+
+                // Sermon Material on Right
+                Box(
+                    modifier = Modifier
+                        .weight(contentWeight)
+                        .fillMaxHeight()
+                ) {
+                    SinglePresentationContent(state = state, profileType = profileType)
+                }
+            } else {
+                // Sermon Material on Left
+                Box(
+                    modifier = Modifier
+                        .weight(contentWeight)
+                        .fillMaxHeight()
+                ) {
+                    SinglePresentationContent(state = state, profileType = profileType)
+                }
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .width(3.dp)
+                        .fillMaxHeight()
+                        .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
+                )
+
+                // Live Cam on Right
+                Box(
+                    modifier = Modifier
+                        .weight(camWeight)
+                        .fillMaxHeight()
+                        .background(Color.Black)
+                ) {
+                    SplitCameraFeedView(state)
+                }
+            }
+        }
+    } else {
+        // Normal Single Presentation Screen
+        SinglePresentationContent(state = state, profileType = profileType, modifier = modifier)
+    }
+}
+
+@Composable
+private fun SplitCameraFeedView(state: PresentationState) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (state.splitCameraSourceType == BackgroundType.IP_CAMERA && !state.splitCameraStreamUrl.isNullOrBlank()) {
+            VideoPlayer(
+                videoUri = state.splitCameraStreamUrl,
+                isPlaying = true,
+                isLooping = true,
+                isMuted = true
+            )
+        } else if (state.backgroundType == BackgroundType.IP_CAMERA && !state.backgroundVideoUri.isNullOrBlank()) {
+            VideoPlayer(
+                videoUri = state.backgroundVideoUri,
+                isPlaying = true,
+                isLooping = true,
+                isMuted = true
+            )
+        } else {
+            CameraPreview()
+        }
+
+        // Live Cam Tag
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .background(Color(0xFFDC2626).copy(alpha = 0.85f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(Color.White, RoundedCornerShape(3.dp))
+                )
+                Text(
+                    text = "LIVE CAM",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SinglePresentationContent(
+    state: PresentationState,
+    profileType: DisplayProfileType = DisplayProfileType.MAIN_PROJECTOR,
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -119,12 +243,12 @@ fun PresentationFrameRenderer(
                 fontWeight = if (state.isTextBold) FontWeight.Bold else FontWeight.Normal,
                 fontFamily = state.stylePreset.fontFamily,
                 textAlign = state.textAlignment.value,
-                lineHeight = (state.fontSizeSp * 1.3f).sp,
+                lineHeight = (state.fontSizeSp * state.textLineHeightMultiplier).sp,
                 shadow = if (state.isTextShadowEnabled) {
                     androidx.compose.ui.graphics.Shadow(
                         color = Color.Black,
                         offset = androidx.compose.ui.geometry.Offset(2f, 2f),
-                        blurRadius = 4f
+                        blurRadius = 6f
                     )
                 } else null
             )
@@ -134,189 +258,30 @@ fun PresentationFrameRenderer(
                     val slides = content.slides
                     if (slides.isNotEmpty()) {
                         val index = state.currentSlideIndex.coerceIn(0, slides.size - 1)
-                        val slideText = slides[index]
+                        val slideText = if (state.isTextUppercase) slides[index].uppercase() else slides[index]
 
-                        when (effectivePosition) {
-                            com.example.presentation.TextDisplayPosition.LOWER_THIRD -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.BottomStart
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.6f)), RoundedCornerShape(8.dp))
-                                            .padding(16.dp)
-                                    ) {
-                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            com.example.presentation.TextDisplayPosition.BOTTOM_CENTER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.5f)), RoundedCornerShape(8.dp))
-                                            .padding(16.dp)
-                                    ) {
-                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            com.example.presentation.TextDisplayPosition.TOP_BANNER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.5f)), RoundedCornerShape(8.dp))
-                                            .padding(16.dp)
-                                    ) {
-                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            com.example.presentation.TextDisplayPosition.LEFT_CENTER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(20.dp),
-                                    contentAlignment = Alignment.CenterStart
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth(0.85f)
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha), RoundedCornerShape(8.dp))
-                                            .padding(20.dp)
-                                    ) {
-                                        Text(text = slideText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            com.example.presentation.TextDisplayPosition.CENTER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = state.textBackgroundAlpha))
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(text = slideText, style = liveTextStyle)
-                                }
-                            }
-                        }
+                        RenderFlexibleTextBox(
+                            text = slideText,
+                            title = null,
+                            position = effectivePosition,
+                            state = state,
+                            textStyle = liveTextStyle
+                        )
                     }
                 }
                 is com.example.model.BibleContent -> {
                     val verses = content.verses
                     if (verses.isNotEmpty()) {
                         val index = state.currentSlideIndex.coerceIn(0, verses.size - 1)
-                        val verseText = verses[index]
+                        val verseText = if (state.isTextUppercase) verses[index].uppercase() else verses[index]
 
-                        when (effectivePosition) {
-                            com.example.presentation.TextDisplayPosition.LOWER_THIRD,
-                            com.example.presentation.TextDisplayPosition.BOTTOM_CENTER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.65f)), RoundedCornerShape(8.dp))
-                                            .padding(14.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
-                                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = content.title,
-                                                color = Color(0xFF381E72),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(text = verseText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            com.example.presentation.TextDisplayPosition.TOP_BANNER -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(Color.Black.copy(alpha = state.textBackgroundAlpha.coerceAtLeast(0.65f)), RoundedCornerShape(8.dp))
-                                            .padding(14.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
-                                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = content.title,
-                                                color = Color(0xFF381E72),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(text = verseText, style = liveTextStyle, modifier = Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                            else -> {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = state.textBackgroundAlpha))
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = content.title,
-                                                color = Color(0xFF381E72),
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(text = verseText, style = liveTextStyle)
-                                    }
-                                }
-                            }
-                        }
+                        RenderFlexibleTextBox(
+                            text = verseText,
+                            title = content.title,
+                            position = effectivePosition,
+                            state = state,
+                            textStyle = liveTextStyle
+                        )
                     }
                 }
                 is ImageContent -> {
@@ -376,6 +341,83 @@ fun PresentationFrameRenderer(
         }
     }
 }
+
+@Composable
+private fun RenderFlexibleTextBox(
+    text: String,
+    title: String?,
+    position: com.example.presentation.TextDisplayPosition,
+    state: PresentationState,
+    textStyle: androidx.compose.ui.text.TextStyle
+) {
+    val boxShape = RoundedCornerShape(state.textBoxCornerRadiusDp.dp)
+    val boxPadding = state.textBoxPaddingDp.dp
+    val borderStroke = if (state.textBoxBorderEnabled) {
+        androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFD0BCFF).copy(alpha = 0.7f))
+    } else null
+
+    val (alignment, widthFraction) = when (position) {
+        com.example.presentation.TextDisplayPosition.CENTER -> Alignment.Center to (state.textBoxWidthPercent / 100f)
+        com.example.presentation.TextDisplayPosition.LOWER_THIRD -> Alignment.BottomCenter to (state.textBoxWidthPercent / 100f).coerceAtLeast(0.92f)
+        com.example.presentation.TextDisplayPosition.BOTTOM_CENTER -> Alignment.BottomCenter to (state.textBoxWidthPercent / 100f)
+        com.example.presentation.TextDisplayPosition.TOP_BANNER -> Alignment.TopCenter to (state.textBoxWidthPercent / 100f).coerceAtLeast(0.92f)
+        com.example.presentation.TextDisplayPosition.LEFT_CENTER -> Alignment.CenterStart to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.RIGHT_CENTER -> Alignment.CenterEnd to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.TOP_LEFT -> Alignment.TopStart to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.TOP_RIGHT -> Alignment.TopEnd to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.BOTTOM_LEFT -> Alignment.BottomStart to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.BOTTOM_RIGHT -> Alignment.BottomEnd to (state.textBoxWidthPercent / 100f).coerceAtMost(0.85f)
+        com.example.presentation.TextDisplayPosition.CUSTOM -> {
+            val biasX = ((state.textHorizontalPercent - 50) / 50f).coerceIn(-1f, 1f)
+            val biasY = ((state.textVerticalPercent - 50) / 50f).coerceIn(-1f, 1f)
+            androidx.compose.ui.BiasAlignment(biasX, biasY) to (state.textBoxWidthPercent / 100f)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = alignment
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(widthFraction)
+                .then(
+                    if (borderStroke != null) Modifier.border(borderStroke, boxShape) else Modifier
+                )
+                .background(Color.Black.copy(alpha = state.textBackgroundAlpha), boxShape)
+                .padding(boxPadding),
+            horizontalAlignment = when (state.textAlignment) {
+                com.example.presentation.TextAlignmentOption.LEFT -> Alignment.Start
+                com.example.presentation.TextAlignmentOption.RIGHT -> Alignment.End
+                else -> Alignment.CenterHorizontally
+            }
+        ) {
+            if (!title.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFFD0BCFF), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = title,
+                        color = Color(0xFF381E72),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+            Text(
+                text = text,
+                style = textStyle,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
 
 @Composable
 private fun StageMonitorRenderer(

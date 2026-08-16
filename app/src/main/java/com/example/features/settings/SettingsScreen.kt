@@ -76,6 +76,9 @@ fun SettingsScreen(
         // CARD 1: Live Display & Typography Settings
         LiveTextSettingsCard(server = server, onSetPreset = onSetPreset)
 
+        // CARD 1.5: Split Screen (2-Screen 30:70 Live Cam & Sermon Mode)
+        SplitScreenSettingsCard(server = server)
+
         // CARD 2: External Display Output Card (Phase 9 & 10)
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF25232A)),
@@ -512,6 +515,347 @@ fun SettingsScreen(
 }
 
 @Composable
+fun SplitScreenSettingsCard(server: PresentationServer) {
+    val presState by server.state.collectAsState()
+    var customStreamUrl by remember(presState.splitCameraStreamUrl) {
+        mutableStateOf(presState.splitCameraStreamUrl ?: "http://192.168.1.50:4747/video")
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2E)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header with Switch
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "📺 Dual Split-Screen (30:70 Live Cam & Materi)",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (presState.isSplitScreenEnabled) {
+                            Surface(
+                                color = Color(0xFF10B981),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "ACTIVE",
+                                    color = Color.White,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = "Tampilkan 2 layar live berdampingan: Live Kamera Pembicara (30%) + Materi Khotbah/Lirik (70%)",
+                        color = Color(0xFFD0BCFF),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Switch(
+                    checked = presState.isSplitScreenEnabled,
+                    onCheckedChange = { isEnabled ->
+                        server.updateSplitScreenSettings(isEnabled = isEnabled)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color(0xFFD0BCFF),
+                        checkedTrackColor = Color(0xFF381E72),
+                        uncheckedThumbColor = Color.Gray,
+                        uncheckedTrackColor = Color(0xFF25232A)
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Interactive Mini Visual Preview of Split Screen
+            Text("PREVIEW SPLIT SCREEN LAYOUT:", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .background(Color(0xFF0F172A), RoundedCornerShape(8.dp))
+                    .padding(4.dp)
+            ) {
+                if (presState.isSplitScreenEnabled) {
+                    val camPercent = presState.splitRatioCamPercent.coerceIn(15, 85)
+                    val contentPercent = 100 - camPercent
+
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        if (presState.splitScreenSide == com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT) {
+                            // Cam Left
+                            Box(
+                                modifier = Modifier
+                                    .weight(camPercent / 100f)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF1E293B), RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("🔴 LIVE CAM", color = Color(0xFFEF4444), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("${camPercent}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+
+                            // Divider
+                            Box(
+                                modifier = Modifier
+                                    .width(2.dp)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF38BDF8))
+                            )
+
+                            // Content Right
+                            Box(
+                                modifier = Modifier
+                                    .weight(contentPercent / 100f)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF090D16), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("📖 MATERI KHOTBAH / LIRIK", color = Color(0xFFD0BCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("${contentPercent}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                        } else {
+                            // Content Left
+                            Box(
+                                modifier = Modifier
+                                    .weight(contentPercent / 100f)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF090D16), RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("📖 MATERI KHOTBAH / LIRIK", color = Color(0xFFD0BCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("${contentPercent}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+
+                            // Divider
+                            Box(
+                                modifier = Modifier
+                                    .width(2.dp)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF38BDF8))
+                            )
+
+                            // Cam Right
+                            Box(
+                                modifier = Modifier
+                                    .weight(camPercent / 100f)
+                                    .fillMaxHeight()
+                                    .background(Color(0xFF1E293B), RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("🔴 LIVE CAM", color = Color(0xFFEF4444), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("${camPercent}%", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Mode Split Screen Nonaktif (Layar Live Single 100% Penuh)",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 1. RASIO SPLIT PRESET CHIPS
+            Text("1. Rasio Pembagian Layar (Live Cam : Materi):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val ratioPresets = listOf(
+                    "30:70 (Standar)" to 30,
+                    "70:30" to 70,
+                    "50:50" to 50,
+                    "40:60" to 40,
+                    "25:75" to 25
+                )
+
+                ratioPresets.forEach { (label, ratio) ->
+                    FilterChip(
+                        selected = presState.splitRatioCamPercent == ratio,
+                        onClick = { server.updateSplitScreenSettings(ratioCamPercent = ratio) },
+                        label = { Text(label, fontSize = 10.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF381E72),
+                            selectedLabelColor = Color(0xFFD0BCFF)
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Fine tuning slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Kamera: ${presState.splitRatioCamPercent}%", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.width(85.dp))
+                Slider(
+                    value = presState.splitRatioCamPercent.toFloat(),
+                    onValueChange = { server.updateSplitScreenSettings(ratioCamPercent = it.toInt()) },
+                    valueRange = 15f..85f,
+                    steps = 13,
+                    modifier = Modifier.weight(1f),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF38BDF8),
+                        activeTrackColor = Color(0xFF381E72),
+                        inactiveTrackColor = Color(0xFF25232A)
+                    )
+                )
+                Text("Materi: ${100 - presState.splitRatioCamPercent}%", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.width(85.dp))
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 2. POSISI LAYAR (SIDE ORIENTATION)
+            Text("2. Posisi Tata Letak Layar (Kanan / Kiri):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = presState.splitScreenSide == com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT,
+                    onClick = {
+                        server.updateSplitScreenSettings(side = com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT)
+                    },
+                    label = { Text("👈 Kamera Kiri (30%) | Materi Kanan (70%)", fontSize = 10.sp) },
+                    modifier = Modifier.weight(1f),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+
+                FilterChip(
+                    selected = presState.splitScreenSide == com.example.presentation.SplitScreenSide.CONTENT_LEFT_CAM_RIGHT,
+                    onClick = {
+                        server.updateSplitScreenSettings(side = com.example.presentation.SplitScreenSide.CONTENT_LEFT_CAM_RIGHT)
+                    },
+                    label = { Text("Materi Kiri (70%) | Kamera Kanan (30%) 👉", fontSize = 10.sp) },
+                    modifier = Modifier.weight(1f),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 3. SUMBER KAMERA LIVE (LIVE CAMERA SOURCE)
+            Text("3. Sumber Kamera Live Cam:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = presState.splitCameraSourceType == com.example.presentation.BackgroundType.IP_CAMERA,
+                    onClick = {
+                        server.updateSplitScreenSettings(
+                            sourceType = com.example.presentation.BackgroundType.IP_CAMERA,
+                            cameraStreamUrl = customStreamUrl
+                        )
+                    },
+                    label = { Text("📱 DroidCam / Wireless IP Camera", fontSize = 10.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+
+                FilterChip(
+                    selected = presState.splitCameraSourceType == com.example.presentation.BackgroundType.CAMERA,
+                    onClick = {
+                        server.updateSplitScreenSettings(
+                            sourceType = com.example.presentation.BackgroundType.CAMERA,
+                            cameraStreamUrl = "/camera/stream"
+                        )
+                    },
+                    label = { Text("📷 Kamera Internal / USB Cam", fontSize = 10.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+            }
+
+            if (presState.splitCameraSourceType == com.example.presentation.BackgroundType.IP_CAMERA) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = customStreamUrl,
+                        onValueChange = {
+                            customStreamUrl = it
+                            server.updateSplitScreenSettings(cameraStreamUrl = it)
+                        },
+                        label = { Text("URL Stream IP Camera / DroidCam", fontSize = 11.sp, color = Color.Gray) },
+                        placeholder = { Text("http://192.168.1.50:4747/video") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFD0BCFF),
+                            unfocusedBorderColor = Color(0xFF49454F),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+
+                    Button(
+                        onClick = {
+                            server.updateSplitScreenSettings(
+                                isEnabled = true,
+                                sourceType = com.example.presentation.BackgroundType.IP_CAMERA,
+                                cameraStreamUrl = customStreamUrl
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Text("Simpan & Live", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun LiveTextSettingsCard(
     server: PresentationServer,
     onSetPreset: (LyricsStylePreset) -> Unit
@@ -529,53 +873,25 @@ fun LiveTextSettingsCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "🎨 Pengaturan Tampilan Live & Font",
+                        text = "🎨 Pengaturan Posisi & Tampilan Teks Live Screen",
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Atur ukuran font, tata letak posisi, warna, dan transparansi layar live",
+                        text = "Fleksibel atur posisi teks, ukuran font, perataan, warna, border, dan tata letak lirik",
                         color = Color(0xFFD0BCFF),
                         fontSize = 12.sp
                     )
                 }
 
-
-                Column(horizontalAlignment = Alignment.End) {
-                    val context = LocalContext.current
-                    var ipAddress by remember { mutableStateOf("Memuat IP...") }
-                    val port = server.webServer.activePort
-                    
-                    LaunchedEffect(port) {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val info = getLocalIpInfo()
-                            val primary = info.primaryIp
-                            ipAddress = if (primary.isNotEmpty()) "http://$primary:$port" else "http://localhost:$port"
-                        }
-                    }
-                    
-                    Surface(
-                        color = Color(0xFF10B981),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    ) {
-                        Text(
-                            text = "Live Web: $ipAddress",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                    
-                    Surface(
-                        color = Color(0xFF381E72),
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
+                Surface(
+                    color = Color(0xFF381E72),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
                         text = "${presState.fontSizeSp} SP • ${presState.textPosition.label}",
                         color = Color(0xFFD0BCFF),
                         fontSize = 10.sp,
@@ -584,17 +900,16 @@ fun LiveTextSettingsCard(
                     )
                 }
             }
-                }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Live Preview Window
-            Text("LIVE TEXT PREVIEW:", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text("LIVE TEXT PREVIEW (TAMPILAN NYATA):", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(140.dp)
                     .background(Color.Black, RoundedCornerShape(8.dp))
             ) {
                 com.example.features.display.PresentationFrameRenderer(
@@ -611,8 +926,125 @@ fun LiveTextSettingsCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 1. UKURAN FONT (FONT SIZE)
-            Text("1. Ukuran Font (Font Size):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            // 1. LETAK / POSISI TEKS FLEKSIBEL (FLEXIBLE POSITIONING PRESETS & FREE MODE)
+            Text("1. Letak / Posisi Teks Pada Layar Live:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            // Grid of Presets
+            val positionsRow1 = listOf(
+                com.example.presentation.TextDisplayPosition.LOWER_THIRD,
+                com.example.presentation.TextDisplayPosition.CENTER,
+                com.example.presentation.TextDisplayPosition.BOTTOM_CENTER,
+                com.example.presentation.TextDisplayPosition.TOP_BANNER
+            )
+            val positionsRow2 = listOf(
+                com.example.presentation.TextDisplayPosition.LEFT_CENTER,
+                com.example.presentation.TextDisplayPosition.RIGHT_CENTER,
+                com.example.presentation.TextDisplayPosition.TOP_LEFT,
+                com.example.presentation.TextDisplayPosition.TOP_RIGHT
+            )
+            val positionsRow3 = listOf(
+                com.example.presentation.TextDisplayPosition.BOTTOM_LEFT,
+                com.example.presentation.TextDisplayPosition.BOTTOM_RIGHT,
+                com.example.presentation.TextDisplayPosition.CUSTOM
+            )
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                positionsRow1.forEach { pos ->
+                    FilterChip(
+                        selected = presState.textPosition == pos,
+                        onClick = { server.updateLiveTextSettings(textPosition = pos) },
+                        label = { Text(pos.label, fontSize = 9.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF381E72),
+                            selectedLabelColor = Color(0xFFD0BCFF)
+                        )
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                positionsRow2.forEach { pos ->
+                    FilterChip(
+                        selected = presState.textPosition == pos,
+                        onClick = { server.updateLiveTextSettings(textPosition = pos) },
+                        label = { Text(pos.label, fontSize = 9.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF381E72),
+                            selectedLabelColor = Color(0xFFD0BCFF)
+                        )
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                positionsRow3.forEach { pos ->
+                    FilterChip(
+                        selected = presState.textPosition == pos,
+                        onClick = { server.updateLiveTextSettings(textPosition = pos) },
+                        label = { Text(pos.label, fontSize = 9.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF10B981),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+            }
+
+            // If Custom Positioning is selected or fine-tuning sliders
+            if (presState.textPosition == com.example.presentation.TextDisplayPosition.CUSTOM) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    color = Color(0xFF1C1B1F),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("📐 Pengaturan Koordinat Bebas (Custom Coordinates):", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        
+                        // Vertical Position Slider
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Posisi Vertikal (Atas - Bawah): ${presState.textVerticalPercent}%", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Slider(
+                                value = presState.textVerticalPercent.toFloat(),
+                                onValueChange = { server.updateLiveTextSettings(textVerticalPercent = it.toInt()) },
+                                valueRange = 5f..95f,
+                                modifier = Modifier.weight(1.2f),
+                                colors = SliderDefaults.colors(thumbColor = Color(0xFFD0BCFF), activeTrackColor = Color(0xFF381E72))
+                            )
+                        }
+
+                        // Horizontal Position Slider
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Posisi Horizontal (Kiri - Kanan): ${presState.textHorizontalPercent}%", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Slider(
+                                value = presState.textHorizontalPercent.toFloat(),
+                                onValueChange = { server.updateLiveTextSettings(textHorizontalPercent = it.toInt()) },
+                                valueRange = 5f..95f,
+                                modifier = Modifier.weight(1.2f),
+                                colors = SliderDefaults.colors(thumbColor = Color(0xFFD0BCFF), activeTrackColor = Color(0xFF381E72))
+                            )
+                        }
+
+                        // Width Slider
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Lebar Kotak Teks: ${presState.textBoxWidthPercent}%", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                            Slider(
+                                value = presState.textBoxWidthPercent.toFloat(),
+                                onValueChange = { server.updateLiveTextSettings(textBoxWidthPercent = it.toInt()) },
+                                valueRange = 30f..100f,
+                                modifier = Modifier.weight(1.2f),
+                                colors = SliderDefaults.colors(thumbColor = Color(0xFFD0BCFF), activeTrackColor = Color(0xFF381E72))
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 2. UKURAN FONT (FONT SIZE)
+            Text("2. Ukuran Font (Font Size):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -670,28 +1102,6 @@ fun LiveTextSettingsCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 2. LETAK / POSISI FONT SAAT LIVE (TEXT POSITION ON SCREEN)
-            Text("2. Letak / Posisi Teks Pada Layar Live:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                com.example.presentation.TextDisplayPosition.values().forEach { pos ->
-                    FilterChip(
-                        selected = presState.textPosition == pos,
-                        onClick = { server.updateLiveTextSettings(textPosition = pos) },
-                        label = { Text(pos.label, fontSize = 10.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF381E72),
-                            selectedLabelColor = Color(0xFFD0BCFF)
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
             // 3. RATA TEKS (TEXT ALIGNMENT)
             Text("3. Rata Teks (Text Alignment):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
@@ -714,8 +1124,8 @@ fun LiveTextSettingsCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 4. WARNA FONT & GAYA (TEXT COLOR & STYLE)
-            Text("4. Warna Font & Bayangan:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            // 4. WARNA FONT & GAYA TEKS
+            Text("4. Warna Font & Gaya Teks:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -746,14 +1156,16 @@ fun LiveTextSettingsCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            // Toggles: Bold, Shadow, Uppercase, Border
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 FilterChip(
                     selected = presState.isTextBold,
                     onClick = { server.updateLiveTextSettings(isTextBold = !presState.isTextBold) },
-                    label = { Text(if (presState.isTextBold) "✓ Teks Tebal (Bold)" else "Teks Normal", fontSize = 11.sp) },
+                    label = { Text(if (presState.isTextBold) "✓ Bold" else "Normal", fontSize = 10.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF381E72),
                         selectedLabelColor = Color(0xFFD0BCFF)
@@ -763,7 +1175,27 @@ fun LiveTextSettingsCard(
                 FilterChip(
                     selected = presState.isTextShadowEnabled,
                     onClick = { server.updateLiveTextSettings(isTextShadowEnabled = !presState.isTextShadowEnabled) },
-                    label = { Text(if (presState.isTextShadowEnabled) "✓ Bayangan Teks (Shadow)" else "Tanpa Bayangan", fontSize = 11.sp) },
+                    label = { Text(if (presState.isTextShadowEnabled) "✓ Shadow" else "No Shadow", fontSize = 10.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+
+                FilterChip(
+                    selected = presState.isTextUppercase,
+                    onClick = { server.updateLiveTextSettings(isTextUppercase = !presState.isTextUppercase) },
+                    label = { Text(if (presState.isTextUppercase) "✓ KAPITAL" else "Aa Normal", fontSize = 10.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF381E72),
+                        selectedLabelColor = Color(0xFFD0BCFF)
+                    )
+                )
+
+                FilterChip(
+                    selected = presState.textBoxBorderEnabled,
+                    onClick = { server.updateLiveTextSettings(textBoxBorderEnabled = !presState.textBoxBorderEnabled) },
+                    label = { Text(if (presState.textBoxBorderEnabled) "✓ Border" else "No Border", fontSize = 10.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF381E72),
                         selectedLabelColor = Color(0xFFD0BCFF)
@@ -773,20 +1205,37 @@ fun LiveTextSettingsCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 5. KEGELAPAN OVERLAY LATAR (BACKGROUND DIM)
-            Text("5. Transparansi Latar Teks (Overlay Dimming):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            // 5. JARAK ANTAR BARIS (LINE HEIGHT) & KOTAK TEKS (CORNER / PADDING / DIM)
+            Text("5. Pengaturan Spasi Antar Baris & Kotak Teks:", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Spasi Baris:", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                val lineHeights = listOf("Rapat (1.1x)" to 1.1f, "Normal (1.35x)" to 1.35f, "Longgar (1.6x)" to 1.6f)
+                lineHeights.forEach { (label, lh) ->
+                    FilterChip(
+                        selected = Math.abs(presState.textLineHeightMultiplier - lh) < 0.05f,
+                        onClick = { server.updateLiveTextSettings(textLineHeightMultiplier = lh) },
+                        label = { Text(label, fontSize = 10.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF381E72),
+                            selectedLabelColor = Color(0xFFD0BCFF)
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Transparency
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Latar Kotak:", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.align(Alignment.CenterVertically))
                 val alphaOptions = listOf(
                     "0% (Bebas)" to 0.0f,
                     "35% (Sedang)" to 0.35f,
                     "65% (Gelap)" to 0.65f,
-                    "85% (Penuh)" to 0.85f
+                    "85% (Solid)" to 0.85f
                 )
-
                 alphaOptions.forEach { (label, alpha) ->
                     FilterChip(
                         selected = Math.abs(presState.textBackgroundAlpha - alpha) < 0.05f,
