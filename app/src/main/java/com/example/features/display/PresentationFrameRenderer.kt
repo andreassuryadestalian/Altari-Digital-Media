@@ -255,7 +255,7 @@ private fun SinglePresentationContent(
 
             when (content) {
                 is LyricsContent -> {
-                    val slides = content.slides
+                    val slides = content.getEffectiveSlides(state.lyricsDisplayMode)
                     if (slides.isNotEmpty()) {
                         val index = state.currentSlideIndex.coerceIn(0, slides.size - 1)
                         val slideText = if (state.isTextUppercase) slides[index].uppercase() else slides[index]
@@ -428,8 +428,9 @@ private fun StageMonitorRenderer(
 
     val currentSlideText = when (val c = state.currentContent) {
         is LyricsContent -> {
-            val idx = state.currentSlideIndex.coerceIn(0, (c.slides.size - 1).coerceAtLeast(0))
-            c.slides.getOrNull(idx) ?: ""
+            val slides = c.getEffectiveSlides(state.lyricsDisplayMode)
+            val idx = state.currentSlideIndex.coerceIn(0, (slides.size - 1).coerceAtLeast(0))
+            slides.getOrNull(idx) ?: ""
         }
         is PowerPointContent -> "Slide ${state.currentSlideIndex + 1} of ${c.slides.size}"
         else -> state.currentContent?.title ?: "STAGE CONFIDENCE MONITOR"
@@ -437,8 +438,9 @@ private fun StageMonitorRenderer(
 
     val nextSlideText = when (val c = state.currentContent) {
         is LyricsContent -> {
+            val slides = c.getEffectiveSlides(state.lyricsDisplayMode)
             val nextIdx = state.currentSlideIndex + 1
-            if (nextIdx < c.slides.size) c.slides[nextIdx] else "[END OF SONG]"
+            if (nextIdx < slides.size) slides[nextIdx] else "[END OF SONG]"
         }
         is PowerPointContent -> {
             val nextIdx = state.currentSlideIndex + 1

@@ -97,7 +97,7 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         }
 
         val maxIndex = when (content) {
-            is LyricsContent -> content.slides.size - 1
+            is LyricsContent -> content.getEffectiveSlides(_state.value.lyricsDisplayMode).size - 1
             is BibleContent -> content.verses.size - 1
             is PowerPointContent -> content.slides.size - 1
             else -> 0
@@ -121,7 +121,7 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
     fun setSlideIndex(index: Int) {
         val currentContent = _state.value.currentContent
         val maxIndex = when (currentContent) {
-            is LyricsContent -> currentContent.slides.size - 1
+            is LyricsContent -> currentContent.getEffectiveSlides(_state.value.lyricsDisplayMode).size - 1
             is BibleContent -> currentContent.verses.size - 1
             is PowerPointContent -> currentContent.slides.size - 1
             else -> 0
@@ -136,7 +136,7 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         val currentContent = _state.value.currentContent
         val currentIndex = _state.value.currentSlideIndex
         val maxIndex = when (currentContent) {
-            is LyricsContent -> currentContent.slides.size - 1
+            is LyricsContent -> currentContent.getEffectiveSlides(_state.value.lyricsDisplayMode).size - 1
             is BibleContent -> currentContent.verses.size - 1
             is PowerPointContent -> currentContent.slides.size - 1
             else -> 0
@@ -299,6 +299,34 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
 
     fun toggleSplitScreen() {
         _state.update { it.copy(isSplitScreenEnabled = !it.isSplitScreenEnabled) }
+    }
+
+    fun setLyricsDisplayMode(mode: LyricsDisplayMode) {
+        _state.update { current ->
+            val prevMode = current.lyricsDisplayMode
+            if (prevMode == mode) return@update current
+            val currentContent = current.currentContent
+            val newIndex = if (currentContent is LyricsContent) {
+                val oldSlides = currentContent.getEffectiveSlides(prevMode)
+                val newSlides = currentContent.getEffectiveSlides(mode)
+                if (newSlides.isNotEmpty()) {
+                    val ratio = if (oldSlides.isNotEmpty()) current.currentSlideIndex.toFloat() / oldSlides.size.coerceAtLeast(1) else 0f
+                    (ratio * newSlides.size).toInt().coerceIn(0, newSlides.size - 1)
+                } else 0
+            } else {
+                current.currentSlideIndex
+            }
+            current.copy(lyricsDisplayMode = mode, currentSlideIndex = newIndex)
+        }
+    }
+
+    fun toggleLyricsDisplayMode() {
+        val nextMode = if (_state.value.lyricsDisplayMode == LyricsDisplayMode.PER_BAIT) {
+            LyricsDisplayMode.PER_BARIS
+        } else {
+            LyricsDisplayMode.PER_BAIT
+        }
+        setLyricsDisplayMode(nextMode)
     }
 
 

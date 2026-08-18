@@ -1,5 +1,7 @@
 package com.example.model
 
+import com.example.presentation.LyricsDisplayMode
+
 sealed interface PresentationContent {
     val id: String
     val title: String
@@ -9,7 +11,42 @@ data class LyricsContent(
     override val id: String,
     override val title: String,
     val slides: List<String>
-) : PresentationContent
+) : PresentationContent {
+
+    /**
+     * Returns effective slides based on display mode (PER_BAIT or PER_BARIS).
+     */
+    fun getEffectiveSlides(mode: LyricsDisplayMode): List<String> {
+        return when (mode) {
+            LyricsDisplayMode.PER_BAIT -> if (slides.isEmpty()) listOf("") else slides
+            LyricsDisplayMode.PER_BARIS -> getLineByLineSlides()
+        }
+    }
+
+    /**
+     * Splits lyric verses into individual line slides, excluding section headers like [Chorus] or Verse 1.
+     */
+    fun getLineByLineSlides(): List<String> {
+        val result = mutableListOf<String>()
+        for (slide in slides) {
+            val lines = slide.lines()
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.isNotBlank() && !isSectionHeaderOnly(trimmed)) {
+                    result.add(trimmed)
+                }
+            }
+        }
+        return if (result.isEmpty()) (if (slides.isEmpty()) listOf("") else slides) else result
+    }
+
+    private fun isSectionHeaderOnly(line: String): Boolean {
+        val upper = line.uppercase().trim()
+        if (upper.startsWith("[") && upper.endsWith("]")) return true
+        val headerKeywords = listOf("VERSE", "CHORUS", "BRIDGE", "INTRO", "OUTRO", "REFRAIN", "PRE-CHORUS", "TAG", "ENDING", "BAIT", "REFF")
+        return headerKeywords.any { upper == it || upper.matches(Regex("^(VERSE|BAIT|CHORUS|REFF|BRIDGE)\\s*\\d*$", RegexOption.IGNORE_CASE)) }
+    }
+}
 
 data class ImageContent(
     override val id: String,

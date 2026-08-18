@@ -6,7 +6,10 @@ import android.net.Uri
 import android.widget.Toast
 import android.hardware.display.DisplayManager
 import android.view.Display
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +31,7 @@ import com.example.features.display.DisplayRenderer
 import com.example.features.lyrics.LyricsStylePreset
 import com.example.model.CameraContent
 import com.example.model.IpCameraContent
+import com.example.presentation.LyricsDisplayMode
 import com.example.presentation.PresentationServer
 import com.example.server.getLocalIpAddress
 import com.example.server.getLocalIpInfo
@@ -922,6 +926,76 @@ fun LiveTextSettingsCard(
                         status = com.example.presentation.PresentationStatus.LYRICS
                     )
                 )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // FORMAT PENAMPIL LIRIK (PER BAIT ATAU PER BARIS)
+            Text("Format Penampilan Lirik (Lyrics Display Mode):", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Pilih bagaimana lirik lagu dipecah dan ditampilkan pada layar tayangan / proyektor / live stream.", color = Color.Gray, fontSize = 11.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Option 1: PER BAIT
+                val isBait = presState.lyricsDisplayMode == LyricsDisplayMode.PER_BAIT
+                Surface(
+                    color = if (isBait) Color(0xFF381E72) else Color(0xFF25232A),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, if (isBait) Color(0xFFD0BCFF) else Color(0xFF383545)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { server.setLyricsDisplayMode(LyricsDisplayMode.PER_BAIT) }
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            RadioButton(
+                                selected = isBait,
+                                onClick = { server.setLyricsDisplayMode(LyricsDisplayMode.PER_BAIT) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFFD0BCFF))
+                            )
+                            Text("Per Bait (Verse)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Menampilkan bait penuh (verse / chorus) dalam 1 slide. Standar untuk proyektor jemaat.",
+                            color = Color(0xFFE2E8F0),
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+
+                // Option 2: PER BARIS
+                val isBaris = presState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS
+                Surface(
+                    color = if (isBaris) Color(0xFF0F766E) else Color(0xFF25232A),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, if (isBaris) Color(0xFF2DD4BF) else Color(0xFF383545)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { server.setLyricsDisplayMode(LyricsDisplayMode.PER_BARIS) }
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            RadioButton(
+                                selected = isBaris,
+                                onClick = { server.setLyricsDisplayMode(LyricsDisplayMode.PER_BARIS) },
+                                colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF2DD4BF))
+                            )
+                            Text("Per Baris (1 Line)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Memecah lirik 1 baris per slide secara otomatis. Sangat rapi untuk Lower-Third & Live Stream!",
+                            color = Color(0xFFE2E8F0),
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))

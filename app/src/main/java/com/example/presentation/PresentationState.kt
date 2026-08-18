@@ -37,6 +37,11 @@ enum class SplitScreenSide(val label: String) {
     CONTENT_LEFT_CAM_RIGHT("Materi Kiri (70%) | Kamera Kanan (30%)")
 }
 
+enum class LyricsDisplayMode(val label: String, val shortLabel: String, val description: String) {
+    PER_BAIT("Per Bait (Stanza / Verse)", "Per Bait", "Menampilkan 1 bait penuh (verse / chorus) per slide"),
+    PER_BARIS("Per Baris (Line by Line)", "Per Baris", "Memecah lirik menjadi 1 baris per slide (ideal untuk Lower Third)")
+}
+
 data class PresentationState(
     val currentContent: PresentationContent? = null,
     val nextContent: PresentationContent? = null,
@@ -48,6 +53,9 @@ data class PresentationState(
     val stylePreset: LyricsStylePreset = LyricsStylePreset.WORSHIP,
     val isVideoPlaying: Boolean = true,
     val activeDisplayId: String? = null,
+    
+    // Lyrics Presentation Mode (Per Bait / Per Baris)
+    val lyricsDisplayMode: LyricsDisplayMode = LyricsDisplayMode.PER_BAIT,
     
     // Live Typography & Flexible Text Positioning
     val fontSizeSp: Int = 32,

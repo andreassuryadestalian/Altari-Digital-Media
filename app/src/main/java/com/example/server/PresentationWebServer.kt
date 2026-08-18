@@ -474,6 +474,20 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     "IMAGE" -> presentationServer.setBackgroundImage(url)
                 }
             }
+            "toggle_split_screen" -> {
+                presentationServer.toggleSplitScreen()
+            }
+            "toggle_lyrics_mode" -> {
+                presentationServer.toggleLyricsDisplayMode()
+            }
+            "set_lyrics_mode" -> {
+                val modeStr = cmdJson.optString("mode")
+                if (modeStr.equals("PER_BARIS", ignoreCase = true) || modeStr.equals("LINE", ignoreCase = true)) {
+                    presentationServer.setLyricsDisplayMode(LyricsDisplayMode.PER_BARIS)
+                } else {
+                    presentationServer.setLyricsDisplayMode(LyricsDisplayMode.PER_BAIT)
+                }
+            }
             "set_bg_media" -> {
                 val mediaId = cmdJson.optString("mediaId")
                 val media = presentationServer.mediaLibrary.find { it.id == mediaId }
@@ -676,11 +690,12 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 is LyricsContent -> {
                     contentType = "LYRICS"
                     title = content.title
-                    totalSlides = content.slides.size
-                    content.slides.forEach { slidesArray.put(it) }
-                    if (content.slides.isNotEmpty()) {
-                        val index = slideIndex.coerceIn(0, content.slides.size - 1)
-                        text = content.slides[index]
+                    val effectiveSlides = content.getEffectiveSlides(state.lyricsDisplayMode)
+                    totalSlides = effectiveSlides.size
+                    effectiveSlides.forEach { slidesArray.put(it) }
+                    if (effectiveSlides.isNotEmpty()) {
+                        val index = slideIndex.coerceIn(0, effectiveSlides.size - 1)
+                        text = effectiveSlides[index]
                     }
                 }
                 is BibleContent -> {
@@ -788,6 +803,9 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("textLineHeightMultiplier", state.textLineHeightMultiplier)
             json.put("isTextUppercase", state.isTextUppercase)
             json.put("textBoxBorderEnabled", state.textBoxBorderEnabled)
+
+            // Lyrics Display Mode
+            json.put("lyricsDisplayMode", state.lyricsDisplayMode.name)
 
             // Split Screen Feature
             json.put("isSplitScreenEnabled", state.isSplitScreenEnabled)

@@ -38,6 +38,7 @@ import com.example.features.powerpoint.PowerPointManagementScreen
 import com.example.features.settings.SettingsScreen
 import com.example.model.*
 import com.example.presentation.BackgroundType
+import com.example.presentation.LyricsDisplayMode
 import com.example.presentation.PresentationServer
 import com.example.presentation.PresentationState
 import com.example.presentation.PresentationStatus
@@ -159,6 +160,7 @@ fun DashboardScreen(server: PresentationServer) {
     ) {
         TopBar(
             server = server,
+            presentationState = presentationState,
             selectedTab = selectedTab,
             onTabSelected = { selectedTab = it },
             playlists = playlists,
@@ -375,6 +377,7 @@ fun DashboardScreen(server: PresentationServer) {
 @Composable
 fun TopBar(
     server: PresentationServer,
+    presentationState: PresentationState,
     selectedTab: NavigationTab,
     onTabSelected: (NavigationTab) -> Unit,
     playlists: List<ServicePlaylist>,
@@ -412,32 +415,53 @@ fun TopBar(
                 }
             }
 
-            Box {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Split Screen Quick Toggle Pill
                 Surface(
-                    color = Color(0xFF381E72),
+                    color = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF27272A),
                     shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.clickable { dropdownExpanded = true }
+                    modifier = Modifier.clickable { server.toggleSplitScreen() }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "📋 ${activePlaylist?.name ?: "PLAYLIST"}",
-                            color = Color.White,
-                            fontSize = 11.sp,
+                            text = if (presentationState.isSplitScreenEnabled) "🔲 Split ON (${presentationState.splitRatioCamPercent}:${100 - presentationState.splitRatioCamPercent})" else "🔲 Split OFF",
+                            color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text("▾", color = Color(0xFFD0BCFF), fontSize = 11.sp)
                     }
                 }
 
-                DropdownMenu(
-                    expanded = dropdownExpanded,
-                    onDismissRequest = { dropdownExpanded = false },
-                    modifier = Modifier.background(Color(0xFF25232A))
-                ) {
+                Box {
+                    Surface(
+                        color = Color(0xFF381E72),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.clickable { dropdownExpanded = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "📋 ${activePlaylist?.name ?: "PLAYLIST"}",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text("▾", color = Color(0xFFD0BCFF), fontSize = 11.sp)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = dropdownExpanded,
+                        onDismissRequest = { dropdownExpanded = false },
+                        modifier = Modifier.background(Color(0xFF25232A))
+                    ) {
                     playlists.forEach { pl ->
                         DropdownMenuItem(
                             text = {
@@ -467,6 +491,7 @@ fun TopBar(
                 }
             }
         }
+    }
 
         // Scrollable Navigation Bar (Zero Overlap!)
         ScrollableTabRow(
@@ -938,17 +963,44 @@ fun LandscapeOperatorConsole(
                         )
                     }
 
-                    Surface(
-                        color = PrimaryDark,
-                        shape = RoundedCornerShape(4.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "PREVIEW READY",
-                            color = Primary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
+                        if (previewContent is LyricsContent) {
+                            Surface(
+                                color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF381E72),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.clickable { server.toggleLyricsDisplayMode() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 Per Baris" else "🎶 Per Bait",
+                                        color = Color.White,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text("⇄", color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                                }
+                            }
+                        }
+
+                        Surface(
+                            color = PrimaryDark,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "PREVIEW READY",
+                                color = Primary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
@@ -956,13 +1008,14 @@ fun LandscapeOperatorConsole(
 
                 val content = previewContent
                 if (content is LyricsContent) {
+                    val effectiveSlides = content.getEffectiveSlides(presentationState.lyricsDisplayMode)
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 130.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        itemsIndexed(content.slides) { idx, slide ->
+                        itemsIndexed(effectiveSlides) { idx, slide ->
                             val isPreviewed = idx == previewSlideIndex && content.id == previewContent.id
                             val isLiveContent = content.id == presentationState.currentContent?.id
                             val isLiveSlide = idx == presentationState.currentSlideIndex && isLiveContent
@@ -1275,7 +1328,7 @@ fun LandscapeOperatorConsole(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = when (val c = previewContent) {
-                            is LyricsContent -> c.slides.getOrNull(previewSlideIndex) ?: ""
+                            is LyricsContent -> c.getEffectiveSlides(presentationState.lyricsDisplayMode).getOrNull(previewSlideIndex) ?: ""
                             is BibleContent -> c.verses.getOrNull(previewSlideIndex) ?: ""
                             is IpCameraContent -> "📱 DroidCam Stream: ${c.streamUrl}"
                             is VideoContent -> "🎥 Video: ${c.title}"
@@ -1394,14 +1447,11 @@ fun LandscapeOperatorConsole(
                         }
                     }
 
-                    // Camera Overlay Toggle
+                    // Split Screen Toggle Button
                     Button(
-                        onClick = {
-                            val isCamActive = presentationState.backgroundType == BackgroundType.CAMERA
-                            server.setBackgroundCamera(!isCamActive)
-                        },
+                        onClick = { server.toggleSplitScreen() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (presentationState.backgroundType == BackgroundType.CAMERA) PrimaryDark else Color(0xFF1E293B)
+                            containerColor = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF1E293B)
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1409,11 +1459,57 @@ fun LandscapeOperatorConsole(
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = if (presentationState.backgroundType == BackgroundType.CAMERA) "📷 CAM OVERLAY: ON" else "📷 CAM OVERLAY: OFF",
-                            color = if (presentationState.backgroundType == BackgroundType.CAMERA) Primary else Color.LightGray,
+                            text = if (presentationState.isSplitScreenEnabled) "🔲 SPLIT SCREEN: ON" else "🔲 SPLIT SCREEN: OFF",
+                            color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // Lyrics Mode Toggle
+                        Button(
+                            onClick = { server.toggleLyricsDisplayMode() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF1E293B)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 LIRIK: BARIS" else "🎶 LIRIK: BAIT",
+                                color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF99F6E4) else Color.LightGray,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Camera Overlay Toggle
+                        Button(
+                            onClick = {
+                                val isCamActive = presentationState.backgroundType == BackgroundType.CAMERA
+                                server.setBackgroundCamera(!isCamActive)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (presentationState.backgroundType == BackgroundType.CAMERA) PrimaryDark else Color(0xFF1E293B)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = if (presentationState.backgroundType == BackgroundType.CAMERA) "📷 CAM: ON" else "📷 CAM: OFF",
+                                color = if (presentationState.backgroundType == BackgroundType.CAMERA) Primary else Color.LightGray,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -1463,34 +1559,57 @@ fun PortraitOperatorConsole(
                     .clip(RoundedCornerShape(8.dp))
             ) {
                 Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text("PREVIEW", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("PREVIEW", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                previewContent?.title ?: "No Content",
+                                color = Primary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            previewContent?.title ?: "No Content Selected",
-                            color = Primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
+
+                        if (previewContent is LyricsContent) {
+                            Surface(
+                                color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF381E72),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.clickable { server.toggleLyricsDisplayMode() }
+                            ) {
+                                Text(
+                                    text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 Baris" else "🎶 Bait",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     val content = previewContent
                     if (content is LyricsContent) {
+                        val effectiveSlides = content.getEffectiveSlides(presentationState.lyricsDisplayMode)
                         val isLiveContent = content.id == presentationState.currentContent?.id
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            itemsIndexed(content.slides) { idx, slide ->
+                            itemsIndexed(effectiveSlides) { idx, slide ->
                                 val isSelected = idx == previewSlideIndex
                                 val isLiveSlide = idx == presentationState.currentSlideIndex && isLiveContent
                                 Box(
@@ -1661,6 +1780,8 @@ fun PortraitOperatorConsole(
 
         // Control Footer
         BottomControls(
+            server = server,
+            presentationState = presentationState,
             onPrevious = { server.previousSlide() },
             onNext = { server.nextSlide() },
             onGo = onGoLive,
@@ -1777,6 +1898,8 @@ fun PlaylistPanel(
 
 @Composable
 fun BottomControls(
+    server: PresentationServer,
+    presentationState: PresentationState,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onGo: () -> Unit,
@@ -1787,17 +1910,98 @@ fun BottomControls(
         modifier = Modifier
             .fillMaxWidth()
             .background(BgPanel)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        // Quick Toggle Row in Console: Split Screen, Lyrics Mode & Cam Overlay
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Split Screen Button
+            Button(
+                onClick = { server.toggleSplitScreen() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF1E293B)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = if (presentationState.isSplitScreenEnabled) "🔲 Split: ON" else "🔲 Split: OFF",
+                    color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Lyrics Mode Button
+            Button(
+                onClick = { server.toggleLyricsDisplayMode() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF1E293B)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 1 Baris" else "🎶 1 Bait",
+                    color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF99F6E4) else Color.LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Cam Overlay Button
+            Button(
+                onClick = {
+                    val isCam = presentationState.backgroundType == BackgroundType.CAMERA
+                    server.setBackgroundCamera(!isCam)
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (presentationState.backgroundType == BackgroundType.CAMERA) PrimaryDark else Color(0xFF1E293B)
+                ),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = if (presentationState.backgroundType == BackgroundType.CAMERA) "📷 Cam: ON" else "📷 Cam: OFF",
+                    color = if (presentationState.backgroundType == BackgroundType.CAMERA) Primary else Color.LightGray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             ControlButton(text = "PREV", icon = "◀", onClick = onPrevious, modifier = Modifier.weight(1f))
             ControlButton(text = "NEXT", icon = "▶", onClick = onNext, modifier = Modifier.weight(1f))
-            ControlButton(text = "BLACK", icon = "◼", onClick = onBlack, modifier = Modifier.weight(1f))
-            ControlButton(text = "CLEAR", icon = "◻", onClick = onClear, modifier = Modifier.weight(1f))
+            ControlButton(
+                text = "BLACK",
+                icon = "◼",
+                onClick = onBlack,
+                modifier = Modifier.weight(1f),
+                containerColor = if (presentationState.status == PresentationStatus.BLACK) Color.Red else BorderDark
+            )
+            ControlButton(
+                text = "CLEAR",
+                icon = "◻",
+                onClick = onClear,
+                modifier = Modifier.weight(1f),
+                containerColor = if (presentationState.status == PresentationStatus.CLEAR) Color.Red else BorderDark
+            )
         }
 
         Button(
@@ -1805,11 +2009,11 @@ fun BottomControls(
             colors = ButtonDefaults.buttonColors(containerColor = Primary),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(10.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Text("GO LIVE ▶", color = PrimaryDark, fontSize = 18.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                Text("GO LIVE ▶", color = PrimaryDark, fontSize = 16.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
             }
         }
     }
@@ -1820,13 +2024,14 @@ fun ControlButton(
     text: String,
     icon: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerColor: Color = BorderDark
 ) {
     Button(
         onClick = onClick,
-        colors = ButtonDefaults.buttonColors(containerColor = BorderDark),
+        colors = ButtonDefaults.buttonColors(containerColor = containerColor),
         shape = RoundedCornerShape(8.dp),
-        modifier = modifier.height(48.dp),
+        modifier = modifier.height(44.dp),
         contentPadding = PaddingValues(2.dp)
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
