@@ -3,6 +3,7 @@ package com.example.presentation
 import android.content.Context
 import com.example.features.lyrics.LyricsStylePreset
 import com.example.model.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,8 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
     private val _state = MutableStateFlow(PresentationState())
     override val state: StateFlow<PresentationState> = _state.asStateFlow()
     val webServer = com.example.server.PresentationWebServer(this)
+    private val serverScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var timerJob: Job? = null
 
     // Shared in-memory library for Web Remote & Android App
     val songsLibrary = mutableListOf(
@@ -190,6 +193,16 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
             } else {
                 it.copy(status = PresentationStatus.BLACK)
             }
+        }
+    }
+
+    fun clearBackground() {
+        _state.update {
+            it.copy(
+                backgroundType = BackgroundType.NONE,
+                backgroundImageUri = null,
+                backgroundVideoUri = null
+            )
         }
     }
 
@@ -379,6 +392,102 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
                 slides = finalSlides
             )
             go(lyrics)
+        }
+    }
+
+    fun startSermonTimer() {
+        if (_state.value.sermonTimerRunning) return
+        _state.update { it.copy(sermonTimerRunning = true) }
+        startTimerTicker()
+    }
+
+    fun pauseSermonTimer() {
+        _state.update { it.copy(sermonTimerRunning = false) }
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+    fun toggleSermonTimer() {
+        if (_state.value.sermonTimerRunning) {
+            pauseSermonTimer()
+        } else {
+            startSermonTimer()
+        }
+    }
+
+    fun resetSermonTimer(totalSeconds: Int? = null) {
+        val seconds = totalSeconds ?: _state.value.sermonTimerTotalSeconds
+        _state.update {
+            it.copy(
+                sermonTimerTotalSeconds = seconds,
+                sermonTimerRemainingSeconds = seconds,
+                sermonTimerRunning = false
+            )
+        }
+        timerJob?.cancel()
+        timerJob = null
+    }
+
+    fun setSermonTimerDuration(minutes: Int) {
+        val totalSecs = (minutes * 60).coerceAtLeast(60)
+        _state.update {
+            it.copy(
+                sermonTimerTotalSeconds = totalSecs,
+                sermonTimerRemainingSeconds = totalSecs
+            )
+        }
+    }
+
+    fun addSermonTimerMinutes(minutes: Int) {
+        val addSecs = minutes * 60
+        _state.update {
+            val newRemaining = it.sermonTimerRemainingSeconds + addSecs
+            val newTotal = (it.sermonTimerTotalSeconds + addSecs).coerceAtLeast(60)
+            it.copy(
+                sermonTimerRemainingSeconds = newRemaining,
+                sermonTimerTotalSeconds = newTotal
+            )
+        }
+    }
+
+    fun setStageTimerMode(mode: TimerMode) {
+        _state.update { it.copy(sermonTimerMode = mode) }
+    }
+
+    fun sendStageAlert(message: String) {
+        val clean = message.trim()
+        if (clean.isEmpty()) {
+            clearStageAlert()
+        } else {
+            _state.update { it.copy(stageAlertMessage = clean, isStageAlertActive = true) }
+        }
+    }
+
+    fun clearStageAlert() {
+        _state.update { it.copy(stageAlertMessage = null, isStageAlertActive = false) }
+    }
+
+    private fun startTimerTicker() {
+        timerJob?.cancel()
+        timerJob = serverScope.launch {
+            while (isActive) {
+                delay(1000)
+                _state.update { current ->
+                    if (!current.sermonTimerRunning) {
+                        current
+                    } else {
+                        when (current.sermonTimerMode) {
+                            TimerMode.COUNTDOWN -> current.copy(
+                                sermonTimerRemainingSeconds = current.sermonTimerRemainingSeconds - 1
+                            )
+                            TimerMode.COUNT_UP -> current.copy(
+                                sermonTimerRemainingSeconds = current.sermonTimerRemainingSeconds + 1
+                            )
+                            TimerMode.CLOCK_ONLY -> current
+                        }
+                    }
+                }
+            }
         }
     }
 

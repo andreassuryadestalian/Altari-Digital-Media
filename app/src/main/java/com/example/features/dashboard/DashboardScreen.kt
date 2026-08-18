@@ -1,11 +1,13 @@
 package com.example.features.dashboard
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -36,6 +38,7 @@ import com.example.features.media.MediaManagementScreen
 import com.example.features.playlist.PlaylistManagementScreen
 import com.example.features.powerpoint.PowerPointManagementScreen
 import com.example.features.settings.SettingsScreen
+import com.example.features.stage.StageMonitorScreen
 import com.example.model.*
 import com.example.presentation.BackgroundType
 import com.example.presentation.LyricsDisplayMode
@@ -45,20 +48,27 @@ import com.example.presentation.PresentationStatus
 import com.example.features.lyrics.LyricsStylePreset
 import com.example.server.getLocalIpAddress
 
-// Theme colors
-val BgMain = Color(0xFF1C1B1F)
-val BgTopBar = Color(0xFF25232A)
-val BgPanel = Color(0xFF2B2930)
-val BorderDark = Color(0xFF49454F)
-val TextMain = Color(0xFFE6E1E9)
-val TextMuted = Color(0xFFCAC4D0)
+// Theme colors - Modern Studio Dark Palette
+val BgMain = Color(0xFF0F172A)
+val BgTopBar = Color(0xFF1E293B)
+val BgPanel = Color(0xFF1E293B)
+val BgSubtle = Color(0xFF0B1120)
+val BorderDark = Color(0xFF334155)
+val BorderLight = Color(0xFF475569)
+val TextMain = Color(0xFFF8FAFC)
+val TextMuted = Color(0xFF94A3B8)
+val TextDim = Color(0xFF64748B)
 val Emerald = Color(0xFF10B981)
 val EmeraldLight = Color(0xFF34D399)
-val Primary = Color(0xFFD0BCFF)
-val PrimaryDark = Color(0xFF381E72)
+val EmeraldDark = Color(0xFF064E3B)
+val Primary = Color(0xFFA78BFA)
+val PrimaryDark = Color(0xFF3B1E72)
+val Warning = Color(0xFFF59E0B)
+val Danger = Color(0xFFEF4444)
 
 enum class NavigationTab(val label: String, val icon: String) {
     DASHBOARD("CONSOLE", "📺"),
+    STAGE("STAGE MONITOR", "⏱️"),
     LYRICS("SONGS", "🎵"),
     BIBLE("BIBLE", "📖"),
     POWERPOINT("SLIDES", "📊"),
@@ -217,6 +227,9 @@ fun DashboardScreen(server: PresentationServer) {
                         }
                     )
                 }
+            }
+            NavigationTab.STAGE -> {
+                StageMonitorScreen(server = server)
             }
             NavigationTab.LYRICS -> {
                 LyricsManagementScreen(
@@ -416,6 +429,39 @@ fun TopBar(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Sermon Timer Quick Action Pill
+                val timerSecs = presentationState.sermonTimerRemainingSeconds
+                val isTimerOvertime = timerSecs < 0
+                val absSecs = kotlin.math.abs(timerSecs)
+                val tMins = (absSecs % 3600) / 60
+                val tSecs = absSecs % 60
+                val formattedTimerStr = String.format(java.util.Locale.US, "%s%02d:%02d", if (isTimerOvertime) "+" else "", tMins, tSecs)
+                val timerBadgeColor = when {
+                    isTimerOvertime -> Color(0xFFDC2626)
+                    timerSecs <= 300 -> Color(0xFFD97706)
+                    presentationState.sermonTimerRunning -> Color(0xFF059669)
+                    else -> Color(0xFF27272A)
+                }
+
+                Surface(
+                    color = timerBadgeColor,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.clickable { onTabSelected(NavigationTab.STAGE) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (presentationState.sermonTimerRunning) "⏱️ $formattedTimerStr" else "⏸️ $formattedTimerStr",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 // Split Screen Quick Toggle Pill
                 Surface(
                     color = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF27272A),
@@ -1518,7 +1564,7 @@ fun LandscapeOperatorConsole(
 }
 
 /**
- * Standard Portrait Operator Console
+ * Modern Clean Portrait Operator Console
  */
 @Composable
 fun PortraitOperatorConsole(
@@ -1539,255 +1585,684 @@ fun PortraitOperatorConsole(
     val activePlaylist = playlists.find { it.id == activePlaylistId } ?: playlists.firstOrNull()
     val activePlaylistItems = activePlaylist?.items ?: emptyList()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Dual Viewport (Preview & Program Side-By-Side)
+    var workspaceTab by remember { mutableIntStateOf(0) } // 0: Order, 1: Songs, 2: Media/BG
+    var songSearchQuery by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgMain)
+    ) {
+        // SECTION 1: DUAL MONITORS (Preview & Program Output)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.1f)
-                .background(Color.Black)
-                .padding(8.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // PREVIEW BOX
-            Box(
+            // PREVIEW MONITOR BOX
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BgPanel),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.5.dp, Primary.copy(alpha = 0.6f)),
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .background(BgPanel, RoundedCornerShape(8.dp))
-                    .border(2.dp, BorderDark, RoundedCornerShape(8.dp))
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(130.dp)
             ) {
-                Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
-                            Box(
-                                modifier = Modifier
-                                    .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text("PREVIEW", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = PrimaryDark,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
                             Text(
-                                previewContent?.title ?: "No Content",
+                                "PREVIEW",
                                 color = Primary,
-                                fontSize = 11.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
 
-                        if (previewContent is LyricsContent) {
-                            Surface(
-                                color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF381E72),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.clickable { server.toggleLyricsDisplayMode() }
-                            ) {
-                                Text(
-                                    text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 Baris" else "🎶 Bait",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
+                        Text(
+                            text = previewContent?.title ?: "No Item",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false).padding(start = 4.dp)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                    val content = previewContent
-                    if (content is LyricsContent) {
-                        val effectiveSlides = content.getEffectiveSlides(presentationState.lyricsDisplayMode)
-                        val isLiveContent = content.id == presentationState.currentContent?.id
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            itemsIndexed(effectiveSlides) { idx, slide ->
-                                val isSelected = idx == previewSlideIndex
-                                val isLiveSlide = idx == presentationState.currentSlideIndex && isLiveContent
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectPreviewSlide(idx)
-                                            if (isLiveContent) {
-                                                server.setSlideIndex(idx)
-                                            }
-                                        }
-                                        .background(
-                                            when {
-                                                isLiveSlide -> Color(0xFF064E3B)
-                                                isSelected -> PrimaryDark
-                                                else -> Color.Black.copy(alpha = 0.3f)
-                                            },
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .border(
-                                            1.dp,
-                                            when {
-                                                isLiveSlide -> Emerald
-                                                isSelected -> Primary
-                                                else -> Color.Transparent
-                                            },
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .padding(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = slide,
-                                            color = if (isLiveSlide || isSelected) Color.White else Color.LightGray,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (isLiveSlide) {
-                                            Text(
-                                                text = "LIVE",
-                                                color = Emerald,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(start = 4.dp)
-                                            )
-                                        }
-                                    }
-                                }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(BgSubtle, RoundedCornerShape(6.dp))
+                            .padding(6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val previewText = when (val c = previewContent) {
+                            is LyricsContent -> {
+                                val slides = c.getEffectiveSlides(presentationState.lyricsDisplayMode)
+                                slides.getOrNull(previewSlideIndex) ?: slides.firstOrNull() ?: ""
                             }
+                            is BibleContent -> c.verses.getOrNull(previewSlideIndex) ?: c.verses.firstOrNull() ?: ""
+                            is PowerPointContent -> "📊 Slide #${previewSlideIndex + 1}"
+                            is VideoContent -> "🎬 Video: ${c.title}"
+                            is ImageContent -> "🖼️ Gambar: ${c.title}"
+                            is IpCameraContent -> "📷 Feed DroidCam: ${c.streamUrl}"
+                            else -> "Pilih item dari playlist/library di bawah"
                         }
-                    } else if (content is BibleContent) {
-                        val isLiveContent = content.id == presentationState.currentContent?.id
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            itemsIndexed(content.verses) { idx, verse ->
-                                val isSelected = idx == previewSlideIndex
-                                val isLiveVerse = idx == presentationState.currentSlideIndex && isLiveContent
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectPreviewSlide(idx)
-                                            if (isLiveContent) {
-                                                server.setSlideIndex(idx)
-                                            }
-                                        }
-                                        .background(
-                                            when {
-                                                isLiveVerse -> Color(0xFF064E3B)
-                                                isSelected -> PrimaryDark
-                                                else -> Color.Black.copy(alpha = 0.3f)
-                                            },
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .border(
-                                            1.dp,
-                                            when {
-                                                isLiveVerse -> Emerald
-                                                isSelected -> Primary
-                                                else -> Color.Transparent
-                                            },
-                                            RoundedCornerShape(4.dp)
-                                        )
-                                        .padding(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = verse,
-                                            color = if (isLiveVerse || isSelected) Color.White else Color.LightGray,
-                                            fontSize = 12.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        if (isLiveVerse) {
-                                            Text(
-                                                text = "LIVE",
-                                                color = Emerald,
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(start = 4.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Preview Ready", color = Color.Gray, fontSize = 12.sp)
-                        }
+                        Text(
+                            text = previewText,
+                            color = TextMain,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
 
-            // PROGRAM BOX (Live Render Frame)
-            Box(
+            // PROGRAM (LIVE) MONITOR BOX
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(2.dp, Emerald),
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
-                    .background(Color.Black, RoundedCornerShape(8.dp))
-                    .border(2.dp, Emerald, RoundedCornerShape(8.dp))
-                    .clip(RoundedCornerShape(8.dp))
+                    .height(130.dp)
             ) {
-                PresentationFrameRenderer(state = presentationState)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    PresentationFrameRenderer(state = presentationState)
 
-                Box(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .background(Emerald, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("PROGRAM (LIVE)", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Surface(
+                        color = Emerald,
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .align(Alignment.TopStart)
+                    ) {
+                        Text(
+                            "LIVE PROGRAM",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }
 
-        // Lower Library & Playlist Quick Panel
-        Row(
+        // SECTION 2: MASTER LIVE ACTION DESK
+        Card(
+            colors = CardDefaults.cardColors(containerColor = BgPanel),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
-                .background(BgMain)
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
-            LibraryPanel(
-                modifier = Modifier.weight(1f),
-                library = songsLibrary,
-                onSelect = onSelectPreviewContent
-            )
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // GO LIVE BUTTON
+                Button(
+                    onClick = onGoLive,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Emerald
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("▶ TAMPILKAN KE PROJECTOR (GO LIVE)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Black)
+                    }
+                }
 
-            PlaylistPanel(
-                modifier = Modifier.weight(1f),
-                playlist = activePlaylistItems,
-                playlists = playlists,
-                activePlaylistId = activePlaylistId,
-                onSelectActivePlaylist = onSelectActivePlaylist,
-                onSelect = onSelectPreviewContent
-            )
+                // PRIMARY NAVIGATION & MUTE ACTIONS
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Button(
+                        onClick = { server.previousSlide() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text("◀ PREV", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { server.nextSlide() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text("NEXT ▶", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { server.black() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (presentationState.status == PresentationStatus.BLACK) Danger else Color(0xFF1E293B)
+                        ),
+                        border = BorderStroke(1.dp, if (presentationState.status == PresentationStatus.BLACK) Danger else BorderDark),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text(
+                            "◼ BLACK",
+                            color = if (presentationState.status == PresentationStatus.BLACK) Color.White else Color.LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Button(
+                        onClick = { server.clear() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (presentationState.status == PresentationStatus.CLEAR) Danger else Color(0xFF1E293B)
+                        ),
+                        border = BorderStroke(1.dp, if (presentationState.status == PresentationStatus.CLEAR) Danger else BorderDark),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text(
+                            "◻ CLEAR",
+                            color = if (presentationState.status == PresentationStatus.CLEAR) Color.White else Color.LightGray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // QUICK STREAM TOGGLES
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Split Screen Toggle
+                    Surface(
+                        color = if (presentationState.isSplitScreenEnabled) PrimaryDark else Color(0xFF0F172A),
+                        border = BorderStroke(1.dp, if (presentationState.isSplitScreenEnabled) Primary else BorderDark),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { server.toggleSplitScreen() }
+                    ) {
+                        Text(
+                            text = if (presentationState.isSplitScreenEnabled) "🔲 Split: ON" else "🔲 Split: OFF",
+                            color = if (presentationState.isSplitScreenEnabled) Primary else TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                    }
+
+                    // Lyrics 1 Baris / 1 Bait Toggle
+                    Surface(
+                        color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF0F172A),
+                        border = BorderStroke(1.dp, if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF2DD4BF) else BorderDark),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { server.toggleLyricsDisplayMode() }
+                    ) {
+                        Text(
+                            text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 1 Baris" else "🎶 1 Bait",
+                            color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color.White else TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                    }
+
+                    // Camera Overlay Toggle
+                    val isCam = presentationState.backgroundType == BackgroundType.CAMERA
+                    Surface(
+                        color = if (isCam) Color(0xFF831843) else Color(0xFF0F172A),
+                        border = BorderStroke(1.dp, if (isCam) Color(0xFFF472B6) else BorderDark),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { server.setBackgroundCamera(!isCam) }
+                    ) {
+                        Text(
+                            text = if (isCam) "📷 Cam: ON" else "📷 Cam: OFF",
+                            color = if (isCam) Color.White else TextMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                    }
+                }
+            }
         }
 
-        // Control Footer
-        BottomControls(
-            server = server,
-            presentationState = presentationState,
-            onPrevious = { server.previousSlide() },
-            onNext = { server.nextSlide() },
-            onGo = onGoLive,
-            onBlack = { server.black() },
-            onClear = { server.clear() }
-        )
+        // SECTION 3: WORKSPACE HUB (Segmented Tabs & Content Picker)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = BgPanel),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(top = 6.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp)
+            ) {
+                // Workspace Segmented Control
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BgSubtle, RoundedCornerShape(8.dp))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val tabs = listOf("📋 Order Ibadah", "🎵 Lagu / Songs", "🎬 Media & BG")
+                    tabs.forEachIndexed { index, label ->
+                        val isSelected = workspaceTab == index
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (isSelected) PrimaryDark else Color.Transparent)
+                                .clickable { workspaceTab = index },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Primary else TextMuted,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                when (workspaceTab) {
+                    // TAB 0: ORDER IBADAH (ACTIVE SERVICE PLAYLIST & SLIDE EXPANDER)
+                    0 -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Active Playlist Header & Dropdown
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Susunan: ${activePlaylist?.name}",
+                                    color = TextMain,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Text(
+                                    text = "${activePlaylistItems.size} Item",
+                                    color = TextDim,
+                                    fontSize = 11.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                itemsIndexed(activePlaylistItems) { index, item ->
+                                    val isItemPreviewed = previewContent?.id == item.id
+                                    val isItemLive = presentationState.currentContent?.id == item.id
+
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = when {
+                                                isItemLive -> EmeraldDark
+                                                isItemPreviewed -> PrimaryDark
+                                                else -> BgSubtle
+                                            }
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            when {
+                                                isItemLive -> Emerald
+                                                isItemPreviewed -> Primary
+                                                else -> BorderDark
+                                            }
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onSelectPreviewContent(item)
+                                                onSelectPreviewSlide(0)
+                                            }
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        "${index + 1}.",
+                                                        color = if (isItemLive) EmeraldLight else Primary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                    Text(
+                                                        item.title,
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                if (isItemLive) {
+                                                    Surface(
+                                                        color = Emerald,
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    ) {
+                                                        Text(
+                                                            "LIVE",
+                                                            color = Color.White,
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Black,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // If previewed or live, show clickable verse chips!
+                                            if (isItemPreviewed || isItemLive) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                val slides = when (item) {
+                                                    is LyricsContent -> item.getEffectiveSlides(presentationState.lyricsDisplayMode)
+                                                    is BibleContent -> item.verses
+                                                    else -> emptyList()
+                                                }
+
+                                                if (slides.isNotEmpty()) {
+                                                    LazyRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        itemsIndexed(slides) { sIdx, slideText ->
+                                                            val isSlideSelected = sIdx == previewSlideIndex && isItemPreviewed
+                                                            val isSlideLive = sIdx == presentationState.currentSlideIndex && isItemLive
+
+                                                            Surface(
+                                                                color = when {
+                                                                    isSlideLive -> Emerald
+                                                                    isSlideSelected -> Primary
+                                                                    else -> Color(0xFF334155)
+                                                                },
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                modifier = Modifier.clickable {
+                                                                    onSelectPreviewSlide(sIdx)
+                                                                    if (isItemLive) {
+                                                                        server.setSlideIndex(sIdx)
+                                                                    }
+                                                                }
+                                                            ) {
+                                                                Text(
+                                                                    text = "Slide ${sIdx + 1}",
+                                                                    color = if (isSlideLive || isSlideSelected) Color.Black else Color.White,
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // TAB 1: LAGU / SONG LIBRARY
+                    1 -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            OutlinedTextField(
+                                value = songSearchQuery,
+                                onValueChange = { songSearchQuery = it },
+                                placeholder = { Text("🔍 Cari judul lagu / lirik...", color = TextDim, fontSize = 12.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Primary,
+                                    unfocusedBorderColor = BorderDark
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val filteredSongs = songsLibrary.filter {
+                                it.title.contains(songSearchQuery, ignoreCase = true) ||
+                                it.slides.any { s -> s.contains(songSearchQuery, ignoreCase = true) }
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(filteredSongs) { song ->
+                                    val isSelected = previewContent?.id == song.id
+                                    Surface(
+                                        color = if (isSelected) PrimaryDark else BgSubtle,
+                                        border = BorderStroke(1.dp, if (isSelected) Primary else BorderDark),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onSelectPreviewContent(song)
+                                                onSelectPreviewSlide(0)
+                                            }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(song.title, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    song.slides.firstOrNull() ?: "",
+                                                    color = TextDim,
+                                                    fontSize = 10.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Surface(
+                                                color = Color(0xFF334155),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    "Preview 👁️",
+                                                    color = Primary,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // TAB 2: MEDIA & BACKGROUND HUB
+                    2 -> {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Active Background Status & Clear
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = when (presentationState.backgroundType) {
+                                        BackgroundType.IP_CAMERA -> PrimaryDark
+                                        BackgroundType.VIDEO -> Color(0xFF1E3A8A)
+                                        BackgroundType.IMAGE -> Color(0xFF065F46)
+                                        BackgroundType.CAMERA -> Color(0xFF831843)
+                                        BackgroundType.NONE -> BgSubtle
+                                    }
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("BACKGROUND AKTIF", color = TextDim, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = when (presentationState.backgroundType) {
+                                                BackgroundType.IP_CAMERA -> "📱 DroidCam IP Kamera"
+                                                BackgroundType.VIDEO -> "🎬 Video Loop Aktif"
+                                                BackgroundType.IMAGE -> "🖼️ Background Gambar"
+                                                BackgroundType.CAMERA -> "📷 Kamera HP (Device Cam)"
+                                                BackgroundType.NONE -> "⬛ Background Hitam Polos"
+                                            },
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+
+                                    if (presentationState.backgroundType != BackgroundType.NONE) {
+                                        Button(
+                                            onClick = { server.clearBackground() },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Danger),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.height(30.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Clear BG", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Add DroidCam Button
+                            Button(
+                                onClick = onOpenAddDroidCam,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
+                                modifier = Modifier.fillMaxWidth().height(38.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("📱 + Sambungkan DroidCam HP Kamera", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Media Items List
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                items(mediaLibrary) { media ->
+                                    Surface(
+                                        color = BgSubtle,
+                                        border = BorderStroke(1.dp, BorderDark),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(media.title, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    when (media) {
+                                                        is VideoContent -> "Video Motion"
+                                                        is ImageContent -> "Still Image"
+                                                        is IpCameraContent -> "IP Camera Feed"
+                                                        else -> "Media"
+                                                    },
+                                                    color = TextDim,
+                                                    fontSize = 9.sp
+                                                )
+                                            }
+
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Button(
+                                                    onClick = {
+                                                        when (media) {
+                                                            is VideoContent -> server.setBackgroundVideo(media.uri)
+                                                            is ImageContent -> server.setBackgroundImage(media.uri)
+                                                            is IpCameraContent -> server.setBackgroundIpCamera(media.streamUrl)
+                                                            else -> {}
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark),
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    modifier = Modifier.height(30.dp),
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("Set BG", color = Primary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1863,7 +2338,7 @@ fun PlaylistPanel(
                 DropdownMenu(
                     expanded = dropdownExpanded,
                     onDismissRequest = { dropdownExpanded = false },
-                    modifier = Modifier.background(Color(0xFF25232A))
+                    modifier = Modifier.background(Color(0xFF1E293B))
                 ) {
                     playlists.forEach { pl ->
                         DropdownMenuItem(
@@ -1913,75 +2388,6 @@ fun BottomControls(
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Quick Toggle Row in Console: Split Screen, Lyrics Mode & Cam Overlay
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // Split Screen Button
-            Button(
-                onClick = { server.toggleSplitScreen() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF1E293B)
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = if (presentationState.isSplitScreenEnabled) "🔲 Split: ON" else "🔲 Split: OFF",
-                    color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Lyrics Mode Button
-            Button(
-                onClick = { server.toggleLyricsDisplayMode() },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF0D9488) else Color(0xFF1E293B)
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) "🎶 1 Baris" else "🎶 1 Bait",
-                    color = if (presentationState.lyricsDisplayMode == LyricsDisplayMode.PER_BARIS) Color(0xFF99F6E4) else Color.LightGray,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Cam Overlay Button
-            Button(
-                onClick = {
-                    val isCam = presentationState.backgroundType == BackgroundType.CAMERA
-                    server.setBackgroundCamera(!isCam)
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (presentationState.backgroundType == BackgroundType.CAMERA) PrimaryDark else Color(0xFF1E293B)
-                ),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(38.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = if (presentationState.backgroundType == BackgroundType.CAMERA) "📷 Cam: ON" else "📷 Cam: OFF",
-                    color = if (presentationState.backgroundType == BackgroundType.CAMERA) Primary else Color.LightGray,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1993,27 +2399,27 @@ fun BottomControls(
                 icon = "◼",
                 onClick = onBlack,
                 modifier = Modifier.weight(1f),
-                containerColor = if (presentationState.status == PresentationStatus.BLACK) Color.Red else BorderDark
+                containerColor = if (presentationState.status == PresentationStatus.BLACK) Danger else BorderDark
             )
             ControlButton(
                 text = "CLEAR",
                 icon = "◻",
                 onClick = onClear,
                 modifier = Modifier.weight(1f),
-                containerColor = if (presentationState.status == PresentationStatus.CLEAR) Color.Red else BorderDark
+                containerColor = if (presentationState.status == PresentationStatus.CLEAR) Danger else BorderDark
             )
         }
 
         Button(
             onClick = onGo,
-            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+            colors = ButtonDefaults.buttonColors(containerColor = Emerald),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp),
-            shape = RoundedCornerShape(10.dp)
+                .height(44.dp),
+            shape = RoundedCornerShape(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                Text("GO LIVE ▶", color = PrimaryDark, fontSize = 16.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                Text("GO LIVE ▶", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
             }
         }
     }

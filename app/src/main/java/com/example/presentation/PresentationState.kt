@@ -42,6 +42,12 @@ enum class LyricsDisplayMode(val label: String, val shortLabel: String, val desc
     PER_BARIS("Per Baris (Line by Line)", "Per Baris", "Memecah lirik menjadi 1 baris per slide (ideal untuk Lower Third)")
 }
 
+enum class TimerMode(val label: String) {
+    COUNTDOWN("Hitung Mundur (Countdown)"),
+    COUNT_UP("Hitung Maju (Elapsed)"),
+    CLOCK_ONLY("Hanya Jam")
+}
+
 data class PresentationState(
     val currentContent: PresentationContent? = null,
     val nextContent: PresentationContent? = null,
@@ -56,6 +62,15 @@ data class PresentationState(
     
     // Lyrics Presentation Mode (Per Bait / Per Baris)
     val lyricsDisplayMode: LyricsDisplayMode = LyricsDisplayMode.PER_BAIT,
+    
+    // Stage Confidence Monitor & Sermon Countdown Timer
+    val sermonTimerRunning: Boolean = false,
+    val sermonTimerTotalSeconds: Int = 30 * 60, // 30 minutes default
+    val sermonTimerRemainingSeconds: Int = 30 * 60,
+    val sermonTimerMode: TimerMode = TimerMode.COUNTDOWN,
+    val stageAlertMessage: String? = null,
+    val isStageAlertActive: Boolean = false,
+    val isStageClock24H: Boolean = true,
     
     // Live Typography & Flexible Text Positioning
     val fontSizeSp: Int = 32,

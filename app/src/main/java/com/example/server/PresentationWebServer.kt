@@ -201,6 +201,16 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         sendHttpResponse(output, 204, "No Content", ByteArray(0), "image/x-icon")
                         socket.close()
                     }
+                    path == "/stage" || path == "/stage-monitor" || path == "/stage-display" -> {
+                        val html = getStageMonitorHtml()
+                        sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
+                        socket.close()
+                    }
+                    path == "/obs" || path == "/transparent" -> {
+                        val html = getTransparentViewerHtml()
+                        sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
+                        socket.close()
+                    }
                     else -> {
                         // Serve Live Presentation Screen HTML
                         val html = getPresentationViewerHtml()
@@ -488,6 +498,23 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     presentationServer.setLyricsDisplayMode(LyricsDisplayMode.PER_BAIT)
                 }
             }
+            "start_timer" -> presentationServer.startSermonTimer()
+            "pause_timer" -> presentationServer.pauseSermonTimer()
+            "toggle_timer" -> presentationServer.toggleSermonTimer()
+            "reset_timer" -> presentationServer.resetSermonTimer()
+            "set_timer_minutes" -> {
+                val mins = cmdJson.optInt("minutes", 30)
+                presentationServer.setSermonTimerDuration(mins)
+            }
+            "add_timer_minutes" -> {
+                val mins = cmdJson.optInt("minutes", 5)
+                presentationServer.addSermonTimerMinutes(mins)
+            }
+            "send_stage_alert" -> {
+                val msg = cmdJson.optString("message", "")
+                presentationServer.sendStageAlert(msg)
+            }
+            "clear_stage_alert" -> presentationServer.clearStageAlert()
             "set_bg_media" -> {
                 val mediaId = cmdJson.optString("mediaId")
                 val media = presentationServer.mediaLibrary.find { it.id == mediaId }
@@ -806,6 +833,14 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
             // Lyrics Display Mode
             json.put("lyricsDisplayMode", state.lyricsDisplayMode.name)
+
+            // Sermon Timer & Stage Monitor
+            json.put("sermonTimerRunning", state.sermonTimerRunning)
+            json.put("sermonTimerRemainingSeconds", state.sermonTimerRemainingSeconds)
+            json.put("sermonTimerTotalSeconds", state.sermonTimerTotalSeconds)
+            json.put("sermonTimerMode", state.sermonTimerMode.name)
+            json.put("stageAlertMessage", state.stageAlertMessage ?: "")
+            json.put("isStageAlertActive", state.isStageAlertActive)
 
             // Split Screen Feature
             json.put("isSplitScreenEnabled", state.isSplitScreenEnabled)
@@ -1643,6 +1678,474 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
         // Start connection
         fetchStateHttp();
+        connectWebSocket();
+    </script>
+</body>
+</html>"""
+    }
+
+    private fun getStageMonitorHtml(): String {
+        return """<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stage Confidence Monitor</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #0A0A0C;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+        }
+
+        #stage-root {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 16px;
+            gap: 12px;
+        }
+
+        /* TOP BAR: REALTIME CLOCK & SERMON TIMER */
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #18181B;
+            border-radius: 12px;
+            padding: 12px 20px;
+            border: 1px solid #27272A;
+        }
+
+        .bar-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .bar-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #A1A1AA;
+            text-transform: uppercase;
+        }
+
+        #realtime-clock {
+            font-size: 28px;
+            font-weight: 900;
+            color: #FACC15;
+            letter-spacing: 1px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #sermon-timer-box {
+            text-align: right;
+        }
+
+        #timer-status-badge {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        #sermon-timer {
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+        .timer-normal { color: #10B981; }
+        .timer-warning { color: #F59E0B; }
+        .timer-overtime { color: #EF4444; animation: pulse 1s infinite; }
+        .timer-paused { color: #94A3B8; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* STAGE ALERT BANNER */
+        #alert-banner {
+            display: none;
+            background: #DC2626;
+            border: 3px solid #FDE047;
+            border-radius: 10px;
+            padding: 12px 18px;
+            text-align: center;
+            font-size: 22px;
+            font-weight: 900;
+            color: #ffffff;
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.6);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* MAIN CURRENT SLIDE BOX */
+        #current-slide-card {
+            flex: 1.6;
+            background: #18181B;
+            border: 3px solid #3B82F6;
+            border-radius: 14px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            position: relative;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+
+        #current-meta-header {
+            position: absolute;
+            top: 14px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 700;
+            color: #60A5FA;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #current-slide-text {
+            font-size: 42px;
+            font-weight: 800;
+            line-height: 1.35;
+            color: #FFFFFF;
+            max-width: 95%;
+            word-wrap: break-word;
+            white-space: pre-line;
+        }
+
+        /* NEXT SLIDE CUE CARD */
+        #next-slide-card {
+            flex: 0.8;
+            background: #121214;
+            border: 1px solid #3F3F46;
+            border-radius: 12px;
+            padding: 14px 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        #next-meta-header {
+            font-size: 12px;
+            font-weight: 800;
+            color: #FBBF24;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        #next-slide-text {
+            font-size: 22px;
+            font-weight: 600;
+            line-height: 1.35;
+            color: #D4D4D8;
+            white-space: pre-line;
+        }
+
+        /* FULLSCREEN BUTTON */
+        #btn-fs {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 11px;
+            cursor: pointer;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="stage-root">
+        <!-- Top Bar -->
+        <div id="top-bar">
+            <div class="bar-section">
+                <div>
+                    <div class="bar-label">🕒 REALTIME CLOCK</div>
+                    <div id="realtime-clock">--:--:--</div>
+                </div>
+            </div>
+
+            <div id="sermon-timer-box">
+                <div id="timer-status-badge" class="timer-normal">⏱️ KHOTBAH (READY)</div>
+                <div id="sermon-timer" class="timer-normal">30:00</div>
+            </div>
+        </div>
+
+        <!-- Flash Alert -->
+        <div id="alert-banner">📢 PESAN OPERATOR: <span id="alert-text"></span></div>
+
+        <!-- Main Slide -->
+        <div id="current-slide-card">
+            <div id="current-meta-header">
+                <span id="current-title">▶ LIVE PRESENTATION</span>
+                <span id="current-slide-num">SLIDE 1</span>
+            </div>
+            <div id="current-slide-text">MENUNGGU TAYANGAN...</div>
+        </div>
+
+        <!-- Next Slide Preview -->
+        <div id="next-slide-card">
+            <div id="next-meta-header">⏭️ BERIKUTNYA (NEXT CUE):</div>
+            <div id="next-slide-text">[AKHIR LAGU / MATERI]</div>
+        </div>
+    </div>
+
+    <button id="btn-fs" onclick="toggleFullScreen()">⛶ Layar Penuh</button>
+
+    <script>
+        let ws = null;
+        let lastState = null;
+        let clientTimerSecs = 1800;
+        let clientTimerRunning = false;
+
+        function updateRealtimeClock() {
+            const now = new Date();
+            const hrs = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('realtime-clock').innerText = hrs + ':' + mins + ':' + secs;
+        }
+        setInterval(updateRealtimeClock, 1000);
+        updateRealtimeClock();
+
+        function renderState(state) {
+            lastState = state;
+            if (!state) return;
+
+            // 1. Text & Slide Info
+            const currentTitle = document.getElementById('current-title');
+            const currentSlideNum = document.getElementById('current-slide-num');
+            const currentText = document.getElementById('current-slide-text');
+            const nextText = document.getElementById('next-slide-text');
+
+            if (state.status === 'BLACK') {
+                currentText.innerText = '[ LAYAR HITAM / BLACKOUT ]';
+                currentTitle.innerText = 'STATUS: BLACKOUT';
+            } else if (state.status === 'CLEAR') {
+                currentText.innerText = '';
+                currentTitle.innerText = 'STATUS: CLEAR';
+            } else {
+                currentText.innerText = state.text || state.title || 'STAGE MONITOR READY';
+                currentTitle.innerText = '▶ ' + (state.title || 'LIVE CONTENT');
+            }
+
+            const total = state.totalSlides || 0;
+            const currentIdx = (state.slideIndex || 0) + 1;
+            currentSlideNum.innerText = total > 0 ? ('SLIDE ' + currentIdx + ' / ' + total) : '';
+
+            nextText.innerText = state.nextText ? state.nextText : '[AKHIR MATERI / SLIDE TERAKHIR]';
+
+            // 2. Sermon Timer
+            clientTimerRunning = !!state.sermonTimerRunning;
+            clientTimerSecs = state.sermonTimerRemainingSeconds !== undefined ? state.sermonTimerRemainingSeconds : 1800;
+            renderTimerUi();
+
+            // 3. Stage Alert
+            const alertBanner = document.getElementById('alert-banner');
+            const alertText = document.getElementById('alert-text');
+            if (state.isStageAlertActive && state.stageAlertMessage) {
+                alertText.innerText = state.stageAlertMessage;
+                alertBanner.style.display = 'block';
+            } else {
+                alertBanner.style.display = 'none';
+            }
+        }
+
+        function renderTimerUi() {
+            const timerEl = document.getElementById('sermon-timer');
+            const badgeEl = document.getElementById('timer-status-badge');
+            
+            const isOvertime = clientTimerSecs < 0;
+            const absSecs = Math.abs(clientTimerSecs);
+            const hrs = Math.floor(absSecs / 3600);
+            const mins = Math.floor((absSecs % 3600) / 60);
+            const secs = absSecs % 60;
+
+            let formatted = '';
+            if (hrs > 0) {
+                formatted = (isOvertime ? '+' : '') + String(hrs).padStart(2, '0') + ':' + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+            } else {
+                formatted = (isOvertime ? '+' : '') + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+            }
+
+            timerEl.innerText = formatted;
+
+            let colorClass = 'timer-normal';
+            let badgeText = clientTimerRunning ? '⏱️ KHOTBAH (LIVE)' : '⏸️ KHOTBAH (PAUSED)';
+
+            if (isOvertime) {
+                colorClass = 'timer-overtime';
+                badgeText = '⚠️ OVERTIME';
+            } else if (clientTimerSecs <= 300) {
+                colorClass = 'timer-warning';
+                badgeText = clientTimerRunning ? '⏱️ SISA < 5 MENIT' : '⏸️ PAUSED';
+            } else if (!clientTimerRunning) {
+                colorClass = 'timer-paused';
+            }
+
+            timerEl.className = colorClass;
+            badgeEl.className = colorClass;
+            badgeEl.innerText = badgeText;
+        }
+
+        // Local 1-second ticker for smooth timer if WS has slight delay
+        setInterval(() => {
+            if (clientTimerRunning) {
+                clientTimerSecs--;
+                renderTimerUi();
+            }
+        }, 1000);
+
+        function connectWebSocket() {
+            const loc = window.location;
+            const wsProtocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = wsProtocol + '//' + loc.host + '/ws';
+            ws = new WebSocket(wsUrl);
+
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    renderState(data);
+                } catch(e) {}
+            };
+
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 1500);
+            };
+
+            ws.onerror = function() {
+                try { ws.close(); } catch(e) {}
+            };
+        }
+
+        function fetchStateHttp() {
+            fetch('/api/state')
+                .then(res => res.json())
+                .then(data => renderState(data))
+                .catch(err => {});
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {});
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => {});
+                }
+            }
+        }
+
+        fetchStateHttp();
+        connectWebSocket();
+    </script>
+</body>
+</html>"""
+    }
+
+    private fun getTransparentViewerHtml(): String {
+        return """<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Transparent Output</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: transparent !important;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+        }
+
+        #screen-root {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            background: transparent;
+        }
+
+        .text-overlay {
+            position: absolute;
+            transition: all 0.25s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .text-box {
+            box-sizing: border-box;
+            word-wrap: break-word;
+            white-space: pre-line;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7);
+        }
+    </style>
+</head>
+<body>
+    <div id="screen-root">
+        <div id="text-container" class="text-overlay">
+            <div id="text-box" class="text-box"></div>
+        </div>
+    </div>
+    <script>
+        function renderState(state) {
+            const box = document.getElementById('text-box');
+            const container = document.getElementById('text-container');
+            if (state.status === 'BLACK' || state.status === 'CLEAR' || !state.text) {
+                box.style.display = 'none';
+                return;
+            }
+            box.style.display = 'block';
+            box.innerText = state.text;
+            box.style.fontSize = (state.fontSize || 32) + 'px';
+            box.style.color = state.textColor || '#FFFFFF';
+            box.style.fontWeight = state.isBold ? '800' : '500';
+            box.style.textAlign = state.textAlign || 'center';
+            box.style.backgroundColor = 'rgba(0, 0, 0, ' + (state.bgAlpha !== undefined ? state.bgAlpha : 0.4) + ')';
+            box.style.borderRadius = (state.textBoxCornerRadiusDp || 12) + 'px';
+            box.style.padding = (state.textBoxPaddingDp || 16) + 'px';
+            box.style.width = (state.textBoxWidthPercent || 90) + '%';
+            
+            container.style.top = (state.textVerticalPercent || 50) + '%';
+            container.style.left = (state.textHorizontalPercent || 50) + '%';
+            container.style.transform = 'translate(-' + (state.textHorizontalPercent || 50) + '%, -' + (state.textVerticalPercent || 50) + '%)';
+            container.style.width = '100%';
+        }
+
+        function connectWebSocket() {
+            const loc = window.location;
+            const ws = new WebSocket((loc.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + loc.host + '/ws');
+            ws.onmessage = (e) => {
+                try { renderState(JSON.parse(e.data)); } catch(err) {}
+            };
+            ws.onclose = () => setTimeout(connectWebSocket, 1500);
+        }
+        fetch('/api/state').then(r => r.json()).then(renderState).catch(() => {});
         connectWebSocket();
     </script>
 </body>

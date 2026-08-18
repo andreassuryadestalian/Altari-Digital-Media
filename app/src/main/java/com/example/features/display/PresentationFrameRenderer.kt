@@ -25,6 +25,8 @@ import com.example.presentation.PresentationState
 import com.example.presentation.PresentationStatus
 
 import com.example.features.display.DisplayProfileType
+import androidx.compose.runtime.*
+import kotlin.math.abs
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -420,17 +422,31 @@ private fun RenderFlexibleTextBox(
 
 
 @Composable
-private fun StageMonitorRenderer(
+fun StageMonitorRenderer(
     state: PresentationState,
     modifier: Modifier = Modifier
 ) {
-    val currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+    var currentTime by remember {
+        mutableStateOf(SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date()))
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     val currentSlideText = when (val c = state.currentContent) {
         is LyricsContent -> {
             val slides = c.getEffectiveSlides(state.lyricsDisplayMode)
             val idx = state.currentSlideIndex.coerceIn(0, (slides.size - 1).coerceAtLeast(0))
             slides.getOrNull(idx) ?: ""
+        }
+        is BibleContent -> {
+            val verses = c.verses
+            val idx = state.currentSlideIndex.coerceIn(0, (verses.size - 1).coerceAtLeast(0))
+            verses.getOrNull(idx) ?: ""
         }
         is PowerPointContent -> "Slide ${state.currentSlideIndex + 1} of ${c.slides.size}"
         else -> state.currentContent?.title ?: "STAGE CONFIDENCE MONITOR"
@@ -440,7 +456,11 @@ private fun StageMonitorRenderer(
         is LyricsContent -> {
             val slides = c.getEffectiveSlides(state.lyricsDisplayMode)
             val nextIdx = state.currentSlideIndex + 1
-            if (nextIdx < slides.size) slides[nextIdx] else "[END OF SONG]"
+            if (nextIdx < slides.size) slides[nextIdx] else "[AKHIR LAGU / END OF SONG]"
+        }
+        is BibleContent -> {
+            val nextIdx = state.currentSlideIndex + 1
+            if (nextIdx < c.verses.size) c.verses[nextIdx] else "[AKHIR BACAAN]"
         }
         is PowerPointContent -> {
             val nextIdx = state.currentSlideIndex + 1
@@ -449,62 +469,164 @@ private fun StageMonitorRenderer(
         else -> ""
     }
 
+    // Format Sermon Timer
+    val remainingSecs = state.sermonTimerRemainingSeconds
+    val isOvertime = remainingSecs < 0
+    val absSecs = abs(remainingSecs)
+    val timerHours = absSecs / 3600
+    val timerMinutes = (absSecs % 3600) / 60
+    val timerSeconds = absSecs % 60
+    val formattedTimer = if (timerHours > 0) {
+        String.format(Locale.US, "%s%02d:%02d:%02d", if (isOvertime) "+" else "", timerHours, timerMinutes, timerSeconds)
+    } else {
+        String.format(Locale.US, "%s%02d:%02d", if (isOvertime) "+" else "", timerMinutes, timerSeconds)
+    }
+
+    val timerColor = when {
+        !state.sermonTimerRunning && remainingSecs == state.sermonTimerTotalSeconds -> Color(0xFF94A3B8)
+        isOvertime -> Color(0xFFEF4444) // Overtime RED
+        remainingSecs <= 300 -> Color(0xFFF59E0B) // <= 5 min AMBER WARNING
+        else -> Color(0xFF10B981) // Normal GREEN
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .padding(16.dp)
+            .background(Color(0xFF0F0F12))
+            .padding(12.dp)
     ) {
-        // Header info bar
+        // Top Bar: Clock, Sermon Timer & Title
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF18181B), RoundedCornerShape(8.dp))
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("STAGE MONITOR", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("TIME: $currentTime", color = Color.Yellow, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            // Realtime Clock
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("🕒", fontSize = 16.sp)
+                Column {
+                    Text("REALTIME CLOCK", color = Color(0xFF9CA3AF), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(currentTime, color = Color(0xFFFACC15), fontWeight = FontWeight.Black, fontSize = 20.sp)
+                }
+            }
+
+            // Sermon Countdown Timer Widget
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = when {
+                                isOvertime -> "⚠️ OVERTIME"
+                                state.sermonTimerRunning -> "⏱️ KHOTBAH (LIVE)"
+                                else -> "⏸️ KHOTBAH (PAUSED)"
+                            },
+                            color = timerColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = formattedTimer,
+                        color = timerColor,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 24.sp
+                    )
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // Operator Flash Alert Banner
+        if (state.isStageAlertActive && !state.stageAlertMessage.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFDC2626), RoundedCornerShape(8.dp))
+                    .border(2.dp, Color(0xFFFDE047), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "📢 PESAN OPERATOR: ${state.stageAlertMessage}",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Main Current Slide Box
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.5f)
-                .background(Color(0xFF121212), RoundedCornerShape(8.dp))
-                .padding(16.dp),
+                .weight(1.4f)
+                .background(Color(0xFF1E1E24), RoundedCornerShape(8.dp))
+                .border(2.dp, Color(0xFF3B82F6), RoundedCornerShape(8.dp))
+                .padding(14.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = currentSlideText,
-                color = Color.White,
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "▶ TAMPIL SAAT INI (${state.currentContent?.title ?: "No Content"})",
+                        color = Color(0xFF60A5FA),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "SLIDE ${state.currentSlideIndex + 1}",
+                        color = Color(0xFF60A5FA),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = currentSlideText,
+                    color = Color.White,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 34.sp
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Next Slide Preview Box
         if (nextSlideText.isNotBlank()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.8f)
-                    .background(Color(0xFF1E1E24), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
+                    .weight(0.7f)
+                    .background(Color(0xFF141416), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFF3F3F46), RoundedCornerShape(8.dp))
+                    .padding(10.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Column {
-                    Text("NEXT SLIDE:", color = Color.Yellow, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Text("⏭️ BERIKUTNYA (NEXT CUE):", color = Color(0xFFFBBF24), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = nextSlideText,
-                        color = Color.LightGray,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium
+                        color = Color(0xFFD4D4D8),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 22.sp
                     )
                 }
             }
