@@ -491,6 +491,14 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         }
     }
 
+    fun showTicker(text: String) {
+        _state.update { it.copy(tickerText = text, isTickerVisible = true) }
+    }
+
+    fun hideTicker() {
+        _state.update { it.copy(tickerText = null, isTickerVisible = false) }
+    }
+
     fun buildLibraryJson(): JSONObject {
         val json = JSONObject()
         

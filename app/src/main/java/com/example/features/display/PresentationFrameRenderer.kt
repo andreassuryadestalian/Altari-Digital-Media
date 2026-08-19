@@ -1,6 +1,7 @@
 package com.example.features.display
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,75 +52,120 @@ fun PresentationFrameRenderer(
         return
     }
 
-    if (state.isSplitScreenEnabled) {
-        // Dual Split Screen (30:70 / 70:30 Live Cam + Sermon Presentation)
-        val camWeight = (state.splitRatioCamPercent.coerceIn(15, 85) / 100f)
-        val contentWeight = 1f - camWeight
+    Box(modifier = modifier.fillMaxSize()) {
+        if (state.isSplitScreenEnabled) {
+            // Dual Split Screen (30:70 / 70:30 Live Cam + Sermon Presentation)
+            val camWeight = (state.splitRatioCamPercent.coerceIn(15, 85) / 100f)
+            val contentWeight = 1f - camWeight
 
-        Row(
-            modifier = modifier
-                .fillMaxSize()
-                .background(Color(0xFF05050A))
-        ) {
-            if (state.splitScreenSide == com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT) {
-                // Live Cam on Left
-                Box(
-                    modifier = Modifier
-                        .weight(camWeight)
-                        .fillMaxHeight()
-                        .background(Color.Black)
-                ) {
-                    SplitCameraFeedView(state)
-                }
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF05050A))
+            ) {
+                if (state.splitScreenSide == com.example.presentation.SplitScreenSide.CAM_LEFT_CONTENT_RIGHT) {
+                    // Live Cam on Left
+                    Box(
+                        modifier = Modifier
+                            .weight(camWeight)
+                            .fillMaxHeight()
+                            .background(Color.Black)
+                    ) {
+                        SplitCameraFeedView(state)
+                    }
 
-                // Divider
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
-                )
+                    // Divider
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
+                    )
 
-                // Sermon Material on Right
-                Box(
-                    modifier = Modifier
-                        .weight(contentWeight)
-                        .fillMaxHeight()
-                ) {
-                    SinglePresentationContent(state = state, profileType = profileType)
-                }
-            } else {
-                // Sermon Material on Left
-                Box(
-                    modifier = Modifier
-                        .weight(contentWeight)
-                        .fillMaxHeight()
-                ) {
-                    SinglePresentationContent(state = state, profileType = profileType)
-                }
+                    // Sermon Material on Right
+                    Box(
+                        modifier = Modifier
+                            .weight(contentWeight)
+                            .fillMaxHeight()
+                    ) {
+                        SinglePresentationContent(state = state, profileType = profileType)
+                    }
+                } else {
+                    // Sermon Material on Left
+                    Box(
+                        modifier = Modifier
+                            .weight(contentWeight)
+                            .fillMaxHeight()
+                    ) {
+                        SinglePresentationContent(state = state, profileType = profileType)
+                    }
 
-                // Divider
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .fillMaxHeight()
-                        .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
-                )
+                    // Divider
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(Brush.verticalGradient(listOf(Color(0xFFD0BCFF), Color(0xFF38BDF8), Color(0xFFD0BCFF))))
+                    )
 
-                // Live Cam on Right
-                Box(
-                    modifier = Modifier
-                        .weight(camWeight)
-                        .fillMaxHeight()
-                        .background(Color.Black)
-                ) {
-                    SplitCameraFeedView(state)
+                    // Live Cam on Right
+                    Box(
+                        modifier = Modifier
+                            .weight(camWeight)
+                            .fillMaxHeight()
+                            .background(Color.Black)
+                    ) {
+                        SplitCameraFeedView(state)
+                    }
                 }
             }
+        } else {
+            // Normal Single Presentation Screen
+            SinglePresentationContent(state = state, profileType = profileType, modifier = Modifier.fillMaxSize())
         }
-    } else {
-        // Normal Single Presentation Screen
-        SinglePresentationContent(state = state, profileType = profileType, modifier = modifier)
+
+        // Ticker Overlay
+        if (state.isTickerVisible && !state.tickerText.isNullOrBlank() && profileType != DisplayProfileType.STAGE_MONITOR) {
+            TickerBar(
+                text = state.tickerText,
+                backgroundColorRgb = state.tickerBackgroundColorRgb,
+                textColorRgb = state.tickerTextColorRgb,
+                speed = state.tickerSpeed,
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun TickerBar(
+    text: String,
+    backgroundColorRgb: Long,
+    textColorRgb: Long,
+    speed: Int,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .background(Color(backgroundColorRgb))
+            .padding(vertical = 12.dp)
+    ) {
+        Text(
+            text = text,
+            color = Color(textColorRgb),
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(
+                    iterations = Int.MAX_VALUE,
+                    velocity = speed.dp,
+                    initialDelayMillis = 0
+                )
+                .padding(horizontal = 16.dp)
+        )
     }
 }
 

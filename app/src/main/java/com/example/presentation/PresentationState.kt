@@ -91,6 +91,13 @@ data class PresentationState(
     val isTextUppercase: Boolean = false,
     val textBoxBorderEnabled: Boolean = false,
 
+    // Ticker / Running Text
+    val tickerText: String? = null,
+    val isTickerVisible: Boolean = false,
+    val tickerSpeed: Int = 100, // Velocity in dp/s
+    val tickerBackgroundColorRgb: Long = 0xCC000000,
+    val tickerTextColorRgb: Long = 0xFFFFFFFF,
+
     // Split Screen Feature (2 Screen Live Web / Live Presentation)
     val isSplitScreenEnabled: Boolean = false,
     val splitRatioCamPercent: Int = 30, // Default 30% Live Cam : 70% Sermon

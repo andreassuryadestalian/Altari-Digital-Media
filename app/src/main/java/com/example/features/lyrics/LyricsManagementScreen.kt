@@ -67,6 +67,8 @@ fun LyricsManagementScreen(
         else songsList.filter { it.title.contains(searchQuery, ignoreCase = true) }
     }
 
+    var showSmartPasteDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -91,6 +93,13 @@ fun LyricsManagementScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
                 ) {
                     Text("Import TXT", color = Color(0xFFD0BCFF))
+                }
+
+                Button(
+                    onClick = { showSmartPasteDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                ) {
+                    Text("📝 Smart Paste", color = Color.White, fontWeight = FontWeight.Bold)
                 }
 
                 Button(
@@ -254,6 +263,72 @@ fun LyricsManagementScreen(
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) {
                     Text("Cancel", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF2B2930)
+        )
+    }
+
+    // Smart Paste Dialog
+    if (showSmartPasteDialog) {
+        var title by remember { mutableStateOf("") }
+        var rawLyrics by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showSmartPasteDialog = false },
+            title = { Text("📝 Smart Paste Lagu", color = Color.White) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Paste seluruh teks lagu dari Google atau dokumen lain. Sistem akan otomatis memecahnya per bait (dengan mendeteksi baris kosong atau kata kunci Verse/Chorus).",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Judul Lagu", color = Color.Gray) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+
+                    OutlinedTextField(
+                        value = rawLyrics,
+                        onValueChange = { rawLyrics = it },
+                        label = { Text("Lirik (Paste di sini)", color = Color.Gray) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(250.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val parsedSlides = LyricsParser.parse(rawLyrics)
+                        val newSong = LyricsContent(
+                            id = System.currentTimeMillis().toString(),
+                            title = title.ifBlank { "Untitled Song" },
+                            slides = if (parsedSlides.isEmpty()) listOf(rawLyrics) else parsedSlides
+                        )
+                        onAddSong(newSong)
+                        showSmartPasteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                ) {
+                    Text("Auto-Split & Simpan", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSmartPasteDialog = false }) {
+                    Text("Batal", color = Color.Gray)
                 }
             },
             containerColor = Color(0xFF2B2930)

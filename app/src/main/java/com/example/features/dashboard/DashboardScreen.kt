@@ -398,9 +398,18 @@ fun TopBar(
     onSelectActivePlaylist: (String) -> Unit
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
+    var showTickerDialog by remember { mutableStateOf(false) }
     val activePlaylist = playlists.find { it.id == activePlaylistId } ?: playlists.firstOrNull()
     val localIp = remember(server) { getLocalIpAddress(server.context) }
     val port = server.webServer.activePort
+
+    if (showTickerDialog) {
+        TickerDialog(
+            server = server,
+            presentationState = presentationState,
+            onDismiss = { showTickerDialog = false }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -429,6 +438,26 @@ fun TopBar(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Ticker Quick Action Pill
+                Surface(
+                    color = if (presentationState.isTickerVisible) Color(0xFFDC2626) else Color(0xFF27272A),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.clickable { showTickerDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (presentationState.isTickerVisible) "🏃 Ticker ON" else "🏃 Ticker OFF",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 // Sermon Timer Quick Action Pill
                 val timerSecs = presentationState.sermonTimerRemainingSeconds
                 val isTimerOvertime = timerSecs < 0
@@ -2540,6 +2569,70 @@ fun AddDroidCamDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Batal", color = Color.Gray)
+            }
+        }
+    )
+}
+
+@Composable
+fun TickerDialog(
+    server: PresentationServer,
+    presentationState: PresentationState,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(presentationState.tickerText ?: "") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Pengumuman Darurat (Ticker)")
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Teks ini akan berjalan di bagian bawah layar presentasi.",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Pesan Pengumuman") },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    placeholder = { Text("Contoh: Pemilik mobil B 1234 CD harap memindahkan kendaraannya...") }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (text.isNotBlank()) {
+                        server.showTicker(text)
+                    } else {
+                        server.hideTicker()
+                    }
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Emerald)
+            ) {
+                Text(if (text.isNotBlank()) "Tampilkan Ticker" else "Sembunyikan Ticker")
+            }
+        },
+        dismissButton = {
+            if (presentationState.isTickerVisible) {
+                Button(
+                    onClick = {
+                        server.hideTicker()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) {
+                    Text("Matikan Ticker", color = Color.White)
+                }
+            } else {
+                TextButton(onClick = onDismiss) {
+                    Text("Batal")
+                }
             }
         }
     )
