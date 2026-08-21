@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -174,6 +175,12 @@ fun DashboardScreen(server: PresentationServer) {
             .fillMaxSize()
             .background(BgMain)
     ) {
+        // Persistent Hidden Camera Preview to ensure continuous background capture
+        // even when not actively displayed on the main projection/preview
+        Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
+            com.example.features.camera.CameraPreview()
+        }
+
         TopBar(
             server = server,
             presentationState = presentationState,
@@ -1443,33 +1450,29 @@ fun LandscapeOperatorConsole(
                     .border(1.dp, Primary, RoundedCornerShape(8.dp))
                     .clip(RoundedCornerShape(8.dp))
             ) {
-                Column(modifier = Modifier.padding(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .background(PrimaryDark, RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        ) {
-                            Text("PREVIEW", color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(previewContent?.title ?: "None", color = Color.White, fontSize = 11.sp, maxLines = 1)
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = when (val c = previewContent) {
-                            is LyricsContent -> c.getEffectiveSlides(presentationState.lyricsDisplayMode).getOrNull(previewSlideIndex) ?: ""
-                            is BibleContent -> c.verses.getOrNull(previewSlideIndex) ?: ""
-                            is IpCameraContent -> "📱 DroidCam Stream: ${c.streamUrl}"
-                            is VideoContent -> "🎥 Video: ${c.title}"
-                            is ImageContent -> "🖼 Image: ${c.title}"
-                            is CameraContent -> "📷 Local Camera Feed"
-                            else -> "Ready"
-                        },
-                        color = Color.LightGray,
-                        fontSize = 11.sp,
-                        maxLines = 3
-                    )
+                val previewState = presentationState.copy(
+                    backgroundType = when (previewContent) {
+                        is IpCameraContent -> BackgroundType.IP_CAMERA
+                        is CameraContent -> BackgroundType.CAMERA
+                        is VideoContent -> BackgroundType.VIDEO
+                        is ImageContent -> BackgroundType.IMAGE
+                        else -> BackgroundType.NONE
+                    },
+                    backgroundVideoUri = (previewContent as? IpCameraContent)?.streamUrl ?: (previewContent as? VideoContent)?.uri,
+                    backgroundImageUri = (previewContent as? ImageContent)?.uri,
+                    currentContent = previewContent,
+                    currentSlideIndex = previewSlideIndex,
+                    isSplitScreenEnabled = false
+                )
+                com.example.features.display.PresentationFrameRenderer(state = previewState)
+                
+                Box(
+                    modifier = Modifier
+                        .padding(6.dp)
+                        .background(PrimaryDark, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("PREVIEW", color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -1733,30 +1736,24 @@ fun PortraitOperatorConsole(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .background(BgSubtle, RoundedCornerShape(6.dp))
-                            .padding(6.dp),
-                        contentAlignment = Alignment.Center
+                            .background(Color.Black, RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(6.dp))
                     ) {
-                        val previewText = when (val c = previewContent) {
-                            is LyricsContent -> {
-                                val slides = c.getEffectiveSlides(presentationState.lyricsDisplayMode)
-                                slides.getOrNull(previewSlideIndex) ?: slides.firstOrNull() ?: ""
-                            }
-                            is BibleContent -> c.verses.getOrNull(previewSlideIndex) ?: c.verses.firstOrNull() ?: ""
-                            is PowerPointContent -> "📊 Slide #${previewSlideIndex + 1}"
-                            is VideoContent -> "🎬 Video: ${c.title}"
-                            is ImageContent -> "🖼️ Gambar: ${c.title}"
-                            is IpCameraContent -> "📷 Feed DroidCam: ${c.streamUrl}"
-                            else -> "Pilih item dari playlist/library di bawah"
-                        }
-                        Text(
-                            text = previewText,
-                            color = TextMain,
-                            fontSize = 11.sp,
-                            textAlign = TextAlign.Center,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                        val previewState = presentationState.copy(
+                            backgroundType = when (previewContent) {
+                                is IpCameraContent -> BackgroundType.IP_CAMERA
+                                is CameraContent -> BackgroundType.CAMERA
+                                is VideoContent -> BackgroundType.VIDEO
+                                is ImageContent -> BackgroundType.IMAGE
+                                else -> BackgroundType.NONE
+                            },
+                            backgroundVideoUri = (previewContent as? IpCameraContent)?.streamUrl ?: (previewContent as? VideoContent)?.uri,
+                            backgroundImageUri = (previewContent as? ImageContent)?.uri,
+                            currentContent = previewContent,
+                            currentSlideIndex = previewSlideIndex,
+                            isSplitScreenEnabled = false
                         )
+                        com.example.features.display.PresentationFrameRenderer(state = previewState)
                     }
                 }
             }

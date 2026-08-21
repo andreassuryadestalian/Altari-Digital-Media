@@ -2,6 +2,8 @@ package com.example.features.camera
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,13 +13,16 @@ object CameraStreamManager {
     private val _latestFrame = MutableStateFlow<ByteArray?>(null)
     val latestFrame: StateFlow<ByteArray?> = _latestFrame.asStateFlow()
 
+    private val _latestImageBitmap = MutableStateFlow<ImageBitmap?>(null)
+    val latestImageBitmap: StateFlow<ImageBitmap?> = _latestImageBitmap.asStateFlow()
+
     @Volatile
     private var lastFrameTime = 0L
 
     fun onNewFrame(bitmap: Bitmap, rotationDegrees: Int = 0) {
         val now = System.currentTimeMillis()
-        // Throttle to ~25 fps (40ms) to ensure high performance and low latency
-        if (now - lastFrameTime < 40) return
+        // Throttle to ~30 fps (33ms) to ensure high performance and low latency
+        if (now - lastFrameTime < 33) return
         lastFrameTime = now
 
         try {
@@ -27,6 +32,9 @@ object CameraStreamManager {
             } else {
                 bitmap
             }
+
+            // Expose for Compose rendering without decoding overhead
+            _latestImageBitmap.value = finalBitmap.asImageBitmap()
 
             val stream = ByteArrayOutputStream()
             // Compress JPEG at 75% quality for fast network streaming

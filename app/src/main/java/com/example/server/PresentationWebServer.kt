@@ -3129,6 +3129,49 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 }
             }
 
+            let needsFullRender = false;
+            const currentSlotsHash = JSON.stringify(slots.map(s => s.id + "_" + s.streamUrl));
+            if (!window._lastSlotsHash || window._lastSlotsHash !== currentSlotsHash) {
+                needsFullRender = true;
+            }
+            window._lastSlotsHash = currentSlotsHash;
+
+            if (!needsFullRender) {
+                // Update tally and UI states without replacing DOM (prevents MJPEG stream reset)
+                slots.forEach(slot => {
+                    if (slot.isEmpty) return;
+                    const el = document.getElementById('slot-' + slot.id);
+                    if (el) {
+                        const isPvw = selectedPvwCamId === slot.id;
+                        el.className = 'cam-slot' + (slot.isLive ? ' is-pgm' : slot.isSplit ? ' is-split' : isPvw ? ' is-pvw' : '');
+                        
+                        const overlay = el.querySelector('.cam-screen-overlay');
+                        if (overlay) {
+                            let tallyBadge = '<span class="tally-tag tally-off">⚫ STANDBY</span>';
+                            if (slot.isLive) tallyBadge = '<span class="tally-tag tally-pgm">🔴 ON AIR (PGM)</span>';
+                            else if (slot.isSplit) tallyBadge = '<span class="tally-tag tally-split">🔲 SPLIT LIVE</span>';
+                            else if (isPvw) tallyBadge = '<span class="tally-tag tally-pvw">🟢 PVW READY</span>';
+                            
+                            overlay.innerHTML = tallyBadge + (isPvw && !slot.isLive ? '<span style="align-self:flex-end; font-size:8px; font-weight:800; color:#10b981; background:rgba(0,0,0,0.7); padding:2px 5px; border-radius:4px;">👁️ PVW ACTIVE</span>' : '');
+                        }
+                        
+                        const actionsRow = el.querySelector('.cam-actions-row');
+                        if (actionsRow) {
+                            const escapedTitle = escapeHtml(slot.title);
+                            const streamUrl = escapeHtml(slot.streamUrl);
+                            actionsRow.innerHTML = (slot.isLive 
+                                ? '<button class="btn-cam btn-cam-cut is-live">🔴 LIVE PGM</button>'
+                                : '<button class="btn-cam btn-cam-cut" onclick="cutCameraLive(\'' + slot.type + '\', \'' + streamUrl + '\', \'' + escapedTitle + '\')">🚀 CUT LIVE</button>'
+                            ) +
+                            '<button class="btn-cam btn-cam-split ' + (slot.isSplit ? 'is-active' : '') + '" onclick="splitCamera(\'' + slot.type + '\', \'' + streamUrl + '\', \'' + escapedTitle + '\')">' +
+                                '<span>🔲 SPLIT</span>' +
+                            '</button>';
+                        }
+                    }
+                });
+                return;
+            }
+
             let html = '';
             slots.forEach(slot => {
                 if (slot.isEmpty) {

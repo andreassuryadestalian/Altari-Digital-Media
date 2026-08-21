@@ -27,6 +27,7 @@ import com.example.presentation.PresentationStatus
 
 import com.example.features.display.DisplayProfileType
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import kotlin.math.abs
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -187,7 +188,7 @@ private fun SplitCameraFeedView(state: PresentationState) {
                 isMuted = true
             )
         } else {
-            CameraPreview()
+            HeadlessCameraRenderer()
         }
 
         // Live Cam Tag
@@ -249,7 +250,7 @@ private fun SinglePresentationContent(
                 }
             }
             BackgroundType.CAMERA -> {
-                CameraPreview()
+                HeadlessCameraRenderer()
             }
             BackgroundType.IP_CAMERA -> {
                 state.backgroundVideoUri?.let { uri ->
@@ -349,7 +350,7 @@ private fun SinglePresentationContent(
                     )
                 }
                 is CameraContent -> {
-                    CameraPreview()
+                    HeadlessCameraRenderer()
                 }
                 is IpCameraContent -> {
                     VideoPlayer(
@@ -680,4 +681,17 @@ fun StageMonitorRenderer(
             }
         }
     }
+}
+
+@Composable
+fun HeadlessCameraRenderer() {
+    val latestBitmap by com.example.features.camera.CameraStreamManager.latestImageBitmap.collectAsState()
+    latestBitmap?.let { bmp ->
+        androidx.compose.foundation.Image(
+            bitmap = bmp,
+            contentDescription = "Live Camera",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+    } ?: Box(modifier = Modifier.fillMaxSize().background(Color.Black))
 }
