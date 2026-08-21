@@ -1,6 +1,9 @@
 package com.example.features.dashboard
 
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -399,6 +405,7 @@ fun TopBar(
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
     var showTickerDialog by remember { mutableStateOf(false) }
+    var showWebRemoteDialog by remember { mutableStateOf(false) }
     val activePlaylist = playlists.find { it.id == activePlaylistId } ?: playlists.firstOrNull()
     val localIp = remember(server) { getLocalIpAddress(server.context) }
     val port = server.webServer.activePort
@@ -408,6 +415,13 @@ fun TopBar(
             server = server,
             presentationState = presentationState,
             onDismiss = { showTickerDialog = false }
+        )
+    }
+
+    if (showWebRemoteDialog) {
+        WebRemoteDialog(
+            server = server,
+            onDismiss = { showWebRemoteDialog = false }
         )
     }
 
@@ -425,15 +439,36 @@ fun TopBar(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.altari_digital_icon_1787294223180),
+                    contentDescription = "Altari Digital Logo",
                     modifier = Modifier
-                        .size(10.dp)
-                        .background(Emerald, CircleShape)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
                 )
                 Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(Emerald, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
                 Column {
-                    Text("CHURCH PRESENTATION SYSTEM", color = TextMain, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("LIVE WEB DISPLAY: http://$localIp:$port", color = EmeraldLight, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "ALTARI DIGITAL",
+                            color = TextMain,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                    Text(
+                        text = "LIVE WEB DISPLAY: http://$localIp:$port",
+                        color = EmeraldLight,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
@@ -505,6 +540,26 @@ fun TopBar(
                         Text(
                             text = if (presentationState.isSplitScreenEnabled) "🔲 Split ON (${presentationState.splitRatioCamPercent}:${100 - presentationState.splitRatioCamPercent})" else "🔲 Split OFF",
                             color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Web Remote Quick Action Pill
+                Surface(
+                    color = Color(0xFF0D9488),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.clickable { showWebRemoteDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "📱 Remote",
+                            color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -2637,3 +2692,110 @@ fun TickerDialog(
         }
     )
 }
+
+@Composable
+fun WebRemoteDialog(
+    server: PresentationServer,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val localIp = remember(server) { getLocalIpAddress(server.context) }
+    val port = server.webServer.activePort
+    val remoteUrl = "http://$localIp:$port/remote"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("📱 Web Remote Controller")
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(
+                    color = Color(0xFF0D9488).copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color(0xFF0D9488)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "🔒 Hak Akses Terbatas (Media & Kamera)",
+                            color = Color(0xFF2DD4BF),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Remote web khusus untuk kru multimedia/kamera mengganti Media Background dan Kamera Live via Wi-Fi. Full control lirik lagu, ayat Alkitab, dan urutan ibadah tetap aman di konsol utama ini.",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color(0xFF0F172A),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFF334155)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("ALAMAT URL REMOTE WEB:", fontSize = 10.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = remoteUrl,
+                            color = Color(0xFF34D399),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(remoteUrl))
+                            Toast.makeText(context, "URL Web Remote disalin!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("📋 Salin URL", fontSize = 11.sp, color = Color.White)
+                    }
+
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(remoteUrl)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Throwable) {
+                                Toast.makeText(context, "Gagal membuka browser: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("🚀 Buka Web", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Tutup", color = Color(0xFF94A3B8))
+            }
+        }
+    )
+}
+

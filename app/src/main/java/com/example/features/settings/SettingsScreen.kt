@@ -1613,7 +1613,7 @@ fun LiveServerStatusCard(server: PresentationServer) {
                     )
                     
                     Text(
-                        text = "Buka link ini di browser HP/tablet/laptop apa saja untuk mengontrol slide (Next, Prev, Blackout, Clear) secara nirkabel via Wi-Fi!",
+                        text = "Buka link ini di browser HP/tablet kru multimedia untuk mengganti Media Background dan Kamera Live secara nirkabel via Wi-Fi (Full control presentasi tetap aman di konsol utama).",
                         color = Color(0xFF94A3B8),
                         fontSize = 11.sp,
                         modifier = Modifier.padding(vertical = 4.dp)

@@ -206,6 +206,11 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
                         socket.close()
                     }
+                    path == "/remote" || path == "/control" || path == "/web-remote" -> {
+                        val html = getRemoteControlHtml()
+                        sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
+                        socket.close()
+                    }
                     path == "/obs" || path == "/transparent" -> {
                         val html = getTransparentViewerHtml()
                         sendHttpResponse(output, 200, "OK", html.toByteArray(Charsets.UTF_8), "text/html; charset=UTF-8")
@@ -515,6 +520,36 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 presentationServer.sendStageAlert(msg)
             }
             "clear_stage_alert" -> presentationServer.clearStageAlert()
+            "clear_bg" -> {
+                presentationServer.clearBackground()
+            }
+            "toggle_camera_live" -> {
+                val isCam = presentationServer.state.value.backgroundType == BackgroundType.CAMERA
+                presentationServer.setBackgroundCamera(!isCam)
+            }
+            "set_camera_live" -> {
+                val enabled = cmdJson.optBoolean("enabled", true)
+                presentationServer.setBackgroundCamera(enabled)
+            }
+            "switch_camera_live" -> {
+                val camType = cmdJson.optString("type", "CAMERA")
+                val streamUrl = cmdJson.optString("streamUrl", "")
+                if (camType == "CAMERA" || streamUrl.isEmpty() || streamUrl == "/camera/stream" || streamUrl == "camera") {
+                    presentationServer.setBackgroundCamera(true)
+                } else {
+                    presentationServer.setBackgroundIpCamera(streamUrl)
+                }
+            }
+            "switch_split_camera" -> {
+                val camType = cmdJson.optString("type", "CAMERA")
+                val streamUrl = cmdJson.optString("streamUrl", "")
+                val isLocal = camType == "CAMERA" || streamUrl.isEmpty() || streamUrl == "/camera/stream" || streamUrl == "camera"
+                presentationServer.updateSplitScreenSettings(
+                    isEnabled = true,
+                    cameraStreamUrl = if (isLocal) null else streamUrl,
+                    sourceType = if (isLocal) BackgroundType.CAMERA else BackgroundType.IP_CAMERA
+                )
+            }
             "set_bg_media" -> {
                 val mediaId = cmdJson.optString("mediaId")
                 val media = presentationServer.mediaLibrary.find { it.id == mediaId }
@@ -524,6 +559,32 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     is ImageContent -> presentationServer.setBackgroundImage(media.uri)
                     is VideoContent -> presentationServer.setBackgroundVideo(media.uri)
                     else -> {}
+                }
+            }
+            "remove_media" -> {
+                val mediaId = cmdJson.optString("id")
+                if (mediaId.isNotEmpty()) {
+                    presentationServer.removeMedia(mediaId)
+                }
+            }
+            "update_droidcam" -> {
+                val id = cmdJson.optString("id")
+                val title = cmdJson.optString("title")
+                val ip = cmdJson.optString("ip")
+                val port = cmdJson.optString("port", "4747")
+                if (id.isNotEmpty() && ip.isNotEmpty()) {
+                    presentationServer.updateDroidCamMedia(id, title, ip, port)
+                }
+            }
+            "add_droidcam_and_set_live" -> {
+                val ip = cmdJson.optString("ip")
+                val port = cmdJson.optString("port", "4747")
+                if (ip.isNotEmpty()) {
+                    presentationServer.addDroidCamMedia("DroidCam HP ($ip)", ip, port)
+                    val cleanIp = ip.trim().removePrefix("http://").removePrefix("https://").removeSuffix("/")
+                    val cleanPort = port.trim().ifEmpty { "4747" }
+                    val streamUrl = "http://$cleanIp:$cleanPort/video"
+                    presentationServer.setBackgroundIpCamera(streamUrl)
                 }
             }
             "add_droidcam" -> {
@@ -853,6 +914,45 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             }
             json.put("splitCameraStreamUrl", splitCamUrl)
             
+            // Media Library for Remote Media Selection
+            val mediaArray = JSONArray()
+            presentationServer.mediaLibrary.forEach { media ->
+                val mObj = JSONObject()
+                mObj.put("id", media.id)
+                mObj.put("title", media.title)
+                when (media) {
+                    is ImageContent -> {
+                        mObj.put("type", "IMAGE")
+                        mObj.put("uri", media.uri)
+                        mObj.put("url", formatMediaUrl(media.uri))
+                    }
+                    is VideoContent -> {
+                        mObj.put("type", "VIDEO")
+                        mObj.put("uri", media.uri)
+                        mObj.put("url", formatMediaUrl(media.uri))
+                    }
+                    is IpCameraContent -> {
+                        mObj.put("type", "IP_CAMERA")
+                        mObj.put("uri", media.streamUrl)
+                        mObj.put("url", media.streamUrl)
+                    }
+                    is CameraContent -> {
+                        mObj.put("type", "CAMERA")
+                        mObj.put("uri", "camera")
+                        mObj.put("url", "/camera/stream")
+                    }
+                    else -> {
+                        mObj.put("type", "OTHER")
+                        mObj.put("uri", "")
+                        mObj.put("url", "")
+                    }
+                }
+                mediaArray.put(mObj)
+            }
+            json.put("mediaLibrary", mediaArray)
+            json.put("backgroundImageUri", state.backgroundImageUri ?: "")
+            json.put("backgroundVideoUri", state.backgroundVideoUri ?: "")
+
             json.toString()
         } catch (e: Throwable) {
             Log.e("PresentationWebServer", "Error building state JSON", e)
@@ -891,7 +991,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Church Presentation Live Screen</title>
+    <title>Altari Digital - Live Display Screen</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
@@ -1274,7 +1374,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 <line x1="8" y1="21" x2="16" y2="21"></line>
                 <line x1="12" y1="17" x2="12" y2="21"></line>
             </svg>
-            <h1>Church Presentation System</h1>
+            <h1>Altari Digital</h1>
             <p>Live Web Display • Ready to Present</p>
         </div>
     </div>
@@ -2151,5 +2251,1148 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 </body>
 </html>"""
     }
+
+    private fun getRemoteControlHtml(): String {
+        return """<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Altari Digital - Video Switcher & Multi-Cam Remote</title>
+    <style>
+        :root {
+            --bg-main: #070a12;
+            --bg-card: #0f172a;
+            --bg-card-hover: #1e293b;
+            --border-color: #1e293b;
+            --border-subtle: rgba(255,255,255,0.08);
+            --primary: #06b6d4;
+            --primary-glow: rgba(6, 182, 212, 0.4);
+            --emerald: #10b981;
+            --emerald-glow: rgba(16, 185, 129, 0.4);
+            --rose: #ef4444;
+            --rose-glow: rgba(239, 68, 68, 0.5);
+            --amber: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            padding: 10px;
+            padding-bottom: 50px;
+        }
+
+        .container {
+            max-width: 680px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 14px;
+        }
+
+        .header-title h1 {
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .header-title p {
+            font-size: 10px;
+            color: var(--primary);
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 800;
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--emerald);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-badge.disconnected {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--rose);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        /* SECTION HEADER */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #e2e8f0;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .badge-pill {
+            font-size: 9px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        /* MASTER PROGRAM TALLY BANNER */
+        .pgm-banner {
+            background: #090e18;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .pgm-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .pgm-label {
+            font-size: 9px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .pgm-val {
+            font-size: 13px;
+            font-weight: 800;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pgm-val.live-cam {
+            color: #f87171;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        /* MULTI-CAM 2x2 SWITCHER GRID */
+        .switcher-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        @media (max-width: 480px) {
+            .switcher-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+        }
+
+        .cam-slot {
+            background: var(--bg-card);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.25s ease;
+            position: relative;
+        }
+
+        .cam-slot:hover {
+            border-color: #334155;
+        }
+
+        /* TALLY STATES */
+        .cam-slot.is-pgm {
+            border-color: var(--rose) !important;
+            box-shadow: 0 0 18px var(--rose-glow);
+        }
+
+        .cam-slot.is-pvw {
+            border-color: var(--emerald) !important;
+            box-shadow: 0 0 14px var(--emerald-glow);
+        }
+
+        .cam-slot.is-split {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 14px var(--primary-glow);
+        }
+
+        /* VIDEO PREVIEW SCREEN (16:9) */
+        .cam-screen {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            background: #020617;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .cam-feed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+        }
+
+        .cam-screen-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.8) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 6px;
+            pointer-events: none;
+        }
+
+        /* TALLY BADGES OVER VIDEO */
+        .tally-tag {
+            align-self: flex-start;
+            font-size: 8px;
+            font-weight: 900;
+            letter-spacing: 0.5px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .tally-pgm {
+            background: var(--rose);
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
+            animation: pulse-red 1.5s infinite;
+        }
+
+        .tally-pvw {
+            background: var(--emerald);
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+        }
+
+        .tally-split {
+            background: var(--primary);
+            color: #ffffff;
+            box-shadow: 0 0 8px rgba(6, 182, 212, 0.8);
+        }
+
+        .tally-off {
+            background: rgba(0,0,0,0.6);
+            color: var(--text-muted);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+
+        @keyframes pulse-red {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        /* NO SIGNAL STANDBY SCREEN */
+        .no-signal-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #0a0f1d;
+            gap: 4px;
+            color: #64748b;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .no-signal-box .icon {
+            font-size: 22px;
+            opacity: 0.7;
+        }
+
+        .no-signal-box .text {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
+
+        .no-signal-box .subtext {
+            font-size: 8px;
+            color: #475569;
+        }
+
+        /* SLOT FOOTER & CONTROLS */
+        .cam-footer {
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: var(--bg-card);
+        }
+
+        .cam-info-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 4px;
+        }
+
+        .cam-ch-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cam-ch-sub {
+            font-size: 9px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cam-actions-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+        }
+
+        .btn-cam {
+            padding: 7px 4px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            cursor: pointer;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            user-select: none;
+            transition: all 0.15s;
+        }
+
+        .btn-cam:active {
+            transform: scale(0.96);
+        }
+
+        .btn-cam-cut {
+            background: #dc2626;
+            color: white;
+            box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+        }
+
+        .btn-cam-cut.is-live {
+            background: #15803d;
+            box-shadow: 0 2px 6px rgba(21, 128, 61, 0.4);
+            pointer-events: none;
+        }
+
+        .btn-cam-split {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+
+        .btn-cam-split.is-active {
+            background: #0891b2;
+            color: white;
+            border-color: #06b6d4;
+        }
+
+        /* EMPTY SLOT CARD */
+        .empty-slot-card {
+            border: 2px dashed #334155;
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 12px;
+            padding: 16px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-align: center;
+            cursor: pointer;
+            min-height: 140px;
+            transition: all 0.2s;
+        }
+
+        .empty-slot-card:hover {
+            border-color: var(--primary);
+            background: rgba(6, 182, 212, 0.05);
+        }
+
+        .empty-slot-card .icon {
+            font-size: 26px;
+            opacity: 0.8;
+        }
+
+        .empty-slot-card .title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #cbd5e1;
+        }
+
+        .empty-slot-card .desc {
+            font-size: 9px;
+            color: #64748b;
+        }
+
+        /* MASTER BROADCAST BAR */
+        .master-bar {
+            background: linear-gradient(180deg, #131b2e 0%, #0f172a 100%);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .master-bar-title {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .master-buttons-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        @media (max-width: 480px) {
+            .master-buttons-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 6px;
+            }
+        }
+
+        .btn-master {
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 800;
+            border: 1px solid transparent;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            color: #ffffff;
+            transition: all 0.15s;
+        }
+
+        .btn-master:active {
+            transform: scale(0.96);
+        }
+
+        .btn-master .m-icon {
+            font-size: 16px;
+        }
+
+        .btn-master-cut {
+            background: linear-gradient(135deg, #e11d48 0%, #ef4444 100%);
+            box-shadow: 0 4px 10px var(--rose-glow);
+        }
+
+        .btn-master-split {
+            background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%);
+            box-shadow: 0 4px 10px var(--primary-glow);
+        }
+
+        .btn-master-clear {
+            background: #1e293b;
+            color: #cbd5e1;
+            border-color: #334155;
+        }
+
+        .btn-master-black {
+            background: #090d16;
+            color: #94a3b8;
+            border-color: #1e293b;
+        }
+
+        /* ADD CAMERA MODAL / INLINE FORM */
+        .add-cam-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .input-dark {
+            flex: 1;
+            background: #070a12;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 10px;
+            color: #ffffff;
+            font-size: 12px;
+            outline: none;
+        }
+
+        .input-dark:focus {
+            border-color: var(--primary);
+        }
+
+        /* MEDIA LIBRARY (SECTION 2) */
+        .media-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .media-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .media-card.is-active {
+            border-color: var(--emerald);
+            background: rgba(16, 185, 129, 0.08);
+            box-shadow: 0 0 8px var(--emerald-glow);
+        }
+
+        .media-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .media-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .media-details {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .media-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .media-type {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--primary);
+            text-transform: uppercase;
+        }
+
+        .media-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            cursor: pointer;
+            border: none;
+            flex-shrink: 0;
+        }
+
+        .media-btn.apply {
+            background: #0284c7;
+            color: white;
+        }
+
+        .media-btn.active {
+            background: var(--emerald);
+            color: white;
+            pointer-events: none;
+        }
+
+        /* TOAST */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--primary);
+            color: white;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 700;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            z-index: 1000;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-title">
+                <h1>🎬 ALTARI DIGITAL</h1>
+                <p>Live Video Switcher & Multi-Cam Remote</p>
+            </div>
+            <div id="status-badge" class="status-badge disconnected">
+                <div class="status-dot"></div>
+                <span id="status-text">OFFLINE</span>
+            </div>
+        </div>
+
+        <!-- PROGRAM OUT TALLY BAR -->
+        <div class="pgm-banner">
+            <div class="pgm-info">
+                <span class="pgm-label">🔴 PROGRAM OUTPUT (LAYAR PROYEKTOR)</span>
+                <span id="pgm-source-text" class="pgm-val">DEFAULT WORSHIP BG</span>
+            </div>
+            <div id="pgm-split-badge" class="badge-pill" style="display: none;">SPLIT ON</div>
+        </div>
+
+        <!-- SECTION 1: 2x2 MULTI-VIEW SWITCHER GRID -->
+        <div class="section-header">
+            <div class="section-title">
+                <span>📹</span> MULTI-CAM 2x2 SWITCHER GRID
+            </div>
+            <span class="badge-pill">PREVIEW LIVE</span>
+        </div>
+
+        <div id="switcher-container" class="switcher-grid">
+            <!-- Dynamically populated 2x2 camera quadrants -->
+            <div style="grid-column: span 2; text-align: center; color: #64748b; padding: 24px; font-size: 11px;">
+                Memuat preview multi-kamera...
+            </div>
+        </div>
+
+        <!-- MASTER SWITCHER ACTION BAR -->
+        <div class="master-bar">
+            <div class="master-bar-title">⚡ MASTER TRANSITION & CUT CONTROLS</div>
+            <div class="master-buttons-grid">
+                <button class="btn-master btn-master-cut" onclick="cutToSelectedPvw()">
+                    <span class="m-icon">⚡</span>
+                    <span>CUT TO PVW</span>
+                </button>
+                <button class="btn-master btn-master-split" onclick="toggleSplitScreen()">
+                    <span class="m-icon">🔲</span>
+                    <span>TOGGLE SPLIT</span>
+                </button>
+                <button class="btn-master btn-master-clear" onclick="clearBackground()">
+                    <span class="m-icon">🌌</span>
+                    <span>DEFAULT BG</span>
+                </button>
+                <button class="btn-master btn-master-black" onclick="setBlackBackground()">
+                    <span class="m-icon">🖤</span>
+                    <span>BLACKOUT</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- QUICK ADD DROIDCAM STREAM -->
+        <div class="add-cam-card">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span style="font-size:11px; font-weight:800; color:#e2e8f0;">➕ TAMBAH SUMBER DROIDCAM BARU</span>
+                <span style="font-size:9px; color:var(--text-muted);">Wi-Fi Multi-Cam</span>
+            </div>
+            <div class="input-row">
+                <input type="text" id="quick-cam-name" class="input-dark" placeholder="Nama Kamera (cth: Mimbar / WL)" style="max-width:140px;">
+                <input type="text" id="quick-cam-ip" class="input-dark" placeholder="IP HP (cth: 192.168.1.50)">
+                <input type="text" id="quick-cam-port" class="input-dark" style="max-width:60px;" value="4747" placeholder="Port">
+                <button class="btn-cam btn-cam-cut" style="padding:0 12px; font-size:11px;" onclick="addAndLiveDroidCam()">
+                    🚀 Pasang
+                </button>
+            </div>
+        </div>
+
+        <!-- SECTION 2: MEDIA BACKGROUNDS -->
+        <div class="section-header">
+            <div class="section-title">
+                <span>🖼️</span> MEDIA BACKGROUND LAINNYA
+            </div>
+        </div>
+
+        <div id="media-list" class="media-grid">
+            <div style="text-align:center; color:#64748b; padding:12px; font-size:11px;">
+                Memuat perpustakaan media...
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast">
+        <span id="toast-icon">✅</span>
+        <span id="toast-msg">Aksi berhasil dilakukan</span>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentState = null;
+        let selectedPvwCamId = 'cam_local'; // Default selected preview camera
+
+        function showToast(msg, icon = '✅') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-icon').innerText = icon;
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        function sendCommand(cmd) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(cmd));
+            } else {
+                fetch('/api/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(cmd)
+                }).catch(() => {});
+            }
+        }
+
+        function updateUI(state) {
+            currentState = state;
+
+            // Header & Status
+            const isCamBg = state.backgroundType === 'CAMERA' || state.backgroundType === 'IP_CAMERA';
+            const pgmSource = document.getElementById('pgm-source-text');
+            const splitBadge = document.getElementById('pgm-split-badge');
+
+            if (state.backgroundType === 'CAMERA') {
+                pgmSource.innerText = '🔴 CAM 1: KAMERA HP UTAMA (LIVE)';
+                pgmSource.className = 'pgm-val live-cam';
+            } else if (state.backgroundType === 'IP_CAMERA') {
+                const activeMedia = (state.mediaLibrary || []).find(m => m.type === 'IP_CAMERA' && m.uri === state.backgroundVideoUri);
+                const title = activeMedia ? activeMedia.title : ('IP Camera (' + (state.backgroundVideoUri || '') + ')');
+                pgmSource.innerText = '🔴 ' + title.toUpperCase() + ' (LIVE)';
+                pgmSource.className = 'pgm-val live-cam';
+            } else if (state.backgroundType === 'IMAGE') {
+                pgmSource.innerText = '🖼️ GAMBAR LATAR AKTIF';
+                pgmSource.className = 'pgm-val';
+            } else if (state.backgroundType === 'VIDEO') {
+                pgmSource.innerText = '🎬 VIDEO MOTION LOOP AKTIF';
+                pgmSource.className = 'pgm-val';
+            } else {
+                pgmSource.innerText = '🌌 DEFAULT WORSHIP BG';
+                pgmSource.className = 'pgm-val';
+            }
+
+            splitBadge.style.display = state.isSplitScreenEnabled ? 'inline-block' : 'none';
+
+            renderSwitcherGrid(state);
+            renderMediaList(state);
+        }
+
+        function renderSwitcherGrid(state) {
+            const container = document.getElementById('switcher-container');
+            const mediaList = state.mediaLibrary || [];
+            const ipCameras = mediaList.filter(m => m.type === 'IP_CAMERA');
+
+            // Build standard 4 slots for 2x2 grid
+            const slots = [];
+
+            // SLOT 1: Local Phone Camera
+            const isLocalLive = state.backgroundType === 'CAMERA';
+            const isLocalSplit = state.isSplitScreenEnabled && state.splitCameraSourceType === 'CAMERA';
+            slots.push({
+                id: 'cam_local',
+                title: 'CAM 1: HP Utama',
+                sub: 'Kamera Lokal Operator',
+                type: 'CAMERA',
+                streamUrl: '/camera/stream',
+                isLive: isLocalLive,
+                isSplit: isLocalSplit,
+                isEditable: false
+            });
+
+            // SLOT 2, 3, 4: Registered DroidCam / IP Cameras
+            for (let i = 0; i < 3; i++) {
+                const camNum = i + 2;
+                if (i < ipCameras.length) {
+                    const cam = ipCameras[i];
+                    const isLive = state.backgroundType === 'IP_CAMERA' && state.backgroundVideoUri === cam.uri;
+                    const isSplit = state.isSplitScreenEnabled && state.splitCameraStreamUrl === cam.uri;
+                    slots.push({
+                        id: cam.id,
+                        title: 'CAM ' + camNum + ': ' + cam.title,
+                        sub: cam.uri,
+                        type: 'IP_CAMERA',
+                        streamUrl: cam.uri,
+                        isLive: isLive,
+                        isSplit: isSplit,
+                        isEditable: true
+                    });
+                } else {
+                    // Empty placeholder slot
+                    slots.push({
+                        id: 'cam_empty_' + camNum,
+                        camNum: camNum,
+                        isEmpty: true
+                    });
+                }
+            }
+
+            let html = '';
+            slots.forEach(slot => {
+                if (slot.isEmpty) {
+                    html += '<div class="empty-slot-card" onclick="focusQuickAdd(' + slot.camNum + ')">' +
+                        '<div class="icon">➕</div>' +
+                        '<div class="title">TAMBAH CAM ' + slot.camNum + '</div>' +
+                        '<div class="desc">Pasang DroidCam HP ke-' + slot.camNum + '</div>' +
+                    '</div>';
+                    return;
+                }
+
+                const isPvw = selectedPvwCamId === slot.id;
+                let tallyClass = '';
+                let tallyBadge = '<span class="tally-tag tally-off">⚫ STANDBY</span>';
+
+                if (slot.isLive) {
+                    tallyClass = ' is-pgm';
+                    tallyBadge = '<span class="tally-tag tally-pgm">🔴 ON AIR (PGM)</span>';
+                } else if (slot.isSplit) {
+                    tallyClass = ' is-split';
+                    tallyBadge = '<span class="tally-tag tally-split">🔲 SPLIT LIVE</span>';
+                } else if (isPvw) {
+                    tallyClass = ' is-pvw';
+                    tallyBadge = '<span class="tally-tag tally-pvw">🟢 PVW READY</span>';
+                }
+
+                const escapedTitle = escapeHtml(slot.title);
+                const escapedSub = escapeHtml(slot.sub);
+                const streamUrl = escapeHtml(slot.streamUrl);
+
+                html += '<div class="cam-slot' + tallyClass + '" id="slot-' + slot.id + '">' +
+                    '<div class="cam-screen" onclick="selectPvw(\'' + slot.id + '\')">' +
+                        '<img class="cam-feed" src="' + streamUrl + '" onerror="handleImgError(this)" onload="handleImgLoad(this)" alt="' + escapedTitle + '" />' +
+                        '<div class="no-signal-box" style="display:none;">' +
+                            '<div class="icon">📡</div>' +
+                            '<div class="text">STANDBY / NO SIGNAL</div>' +
+                            '<div class="subtext">' + escapedSub + '</div>' +
+                        '</div>' +
+                        '<div class="cam-screen-overlay">' +
+                            tallyBadge +
+                            (isPvw && !slot.isLive ? '<span style="align-self:flex-end; font-size:8px; font-weight:800; color:#10b981; background:rgba(0,0,0,0.7); padding:2px 5px; border-radius:4px;">👁️ PVW ACTIVE</span>' : '') +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="cam-footer">' +
+                        '<div class="cam-info-row">' +
+                            '<div style="min-width:0; flex:1;">' +
+                                '<div class="cam-ch-title">' + escapedTitle + '</div>' +
+                                '<div class="cam-ch-sub">' + escapedSub + '</div>' +
+                            '</div>' +
+                            (slot.isEditable ? '<button style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; padding:2px 4px;" title="Hapus Kamera" onclick="removeCamera(\'' + slot.id + '\', \'' + escapedTitle + '\')">🗑️</button>' : '') +
+                        '</div>' +
+                        '<div class="cam-actions-row">' +
+                            (slot.isLive 
+                                ? '<button class="btn-cam btn-cam-cut is-live">🔴 LIVE PGM</button>'
+                                : '<button class="btn-cam btn-cam-cut" onclick="cutCameraLive(\'' + slot.type + '\', \'' + streamUrl + '\', \'' + escapedTitle + '\')">🚀 CUT LIVE</button>'
+                            ) +
+                            '<button class="btn-cam btn-cam-split ' + (slot.isSplit ? 'is-active' : '') + '" onclick="splitCamera(\'' + slot.type + '\', \'' + streamUrl + '\', \'' + escapedTitle + '\')">' +
+                                '<span>🔲 SPLIT</span>' +
+                            '</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function renderMediaList(state) {
+            const container = document.getElementById('media-list');
+            const mediaList = (state.mediaLibrary || []).filter(m => m.type !== 'IP_CAMERA' && m.type !== 'CAMERA');
+
+            if (mediaList.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:#64748b; padding:12px; font-size:11px;">Belum ada media gambar/video latar tambahan.</div>';
+                return;
+            }
+
+            let html = '';
+            mediaList.forEach(m => {
+                const isCurrent = (m.type === 'IMAGE' && state.backgroundType === 'IMAGE' && state.backgroundImageUri === m.uri) ||
+                                  (m.type === 'VIDEO' && state.backgroundType === 'VIDEO' && state.backgroundVideoUri === m.uri);
+
+                const icon = m.type === 'VIDEO' ? '🎬' : '🖼️';
+                const titleEscaped = escapeHtml(m.title);
+
+                html += '<div class="media-card ' + (isCurrent ? 'is-active' : '') + '">' +
+                    '<div class="media-info">' +
+                        '<div class="media-icon">' + icon + '</div>' +
+                        '<div class="media-details">' +
+                            '<span class="media-title">' + titleEscaped + '</span>' +
+                            '<span class="media-type">' + m.type + '</span>' +
+                        '</div>' +
+                    '</div>' +
+                    (isCurrent 
+                        ? '<button class="media-btn active" style="background:#dc2626; color:white; font-weight:800; border:none; padding:8px 14px; border-radius:6px; box-shadow:0 0 10px rgba(220, 38, 38, 0.5);">🔴 PGM LIVE</button>'
+                        : '<button class="media-btn apply" style="background:#0284c7; color:white; font-weight:800; border:none; padding:8px 14px; border-radius:6px;" onclick="setBgMedia(\'' + m.id + '\', \'' + titleEscaped + '\')">🚀 GO LIVE</button>'
+                    ) +
+                '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function handleImgError(img) {
+            img.style.display = 'none';
+            if (img.nextElementSibling) {
+                img.nextElementSibling.style.display = 'flex';
+            }
+            // Auto retry stream every 3s
+            setTimeout(() => {
+                if (img) {
+                    const src = img.src.split('?')[0];
+                    img.src = src + '?t=' + Date.now();
+                }
+            }, 3000);
+        }
+
+        function handleImgLoad(img) {
+            img.style.display = 'block';
+            if (img.nextElementSibling) {
+                img.nextElementSibling.style.display = 'none';
+            }
+        }
+
+        function selectPvw(camId) {
+            selectedPvwCamId = camId;
+            if (currentState) {
+                renderSwitcherGrid(currentState);
+            }
+            showToast('Preview Kamera dipilih', '👁️');
+        }
+
+        function cutToSelectedPvw() {
+            if (!currentState) return;
+            if (selectedPvwCamId === 'cam_local') {
+                cutCameraLive('CAMERA', '/camera/stream', 'HP Utama');
+                return;
+            }
+            const activeMedia = (currentState.mediaLibrary || []).find(m => m.id === selectedPvwCamId);
+            if (activeMedia) {
+                cutCameraLive('IP_CAMERA', activeMedia.uri, activeMedia.title);
+            } else {
+                cutCameraLive('CAMERA', '/camera/stream', 'HP Utama');
+            }
+        }
+
+        function cutCameraLive(type, streamUrl, title) {
+            sendCommand({
+                action: 'switch_camera_live',
+                type: type,
+                streamUrl: streamUrl
+            });
+            showToast('LIVE CUT: ' + title, '🚀');
+        }
+
+        function splitCamera(type, streamUrl, title) {
+            sendCommand({
+                action: 'switch_split_camera',
+                type: type,
+                streamUrl: streamUrl
+            });
+            showToast('SPLIT SCREEN: ' + title, '🔲');
+        }
+
+        function removeCamera(mediaId, title) {
+            if (confirm('Hapus kamera "' + title + '" dari daftar multi-cam?')) {
+                sendCommand({
+                    action: 'remove_media',
+                    id: mediaId
+                });
+                showToast('Kamera dihapus: ' + title, '🗑️');
+            }
+        }
+
+        function clearBackground() {
+            sendCommand({ action: 'clear_bg' });
+            showToast('Latar kembali ke Default Worship', '🌌');
+        }
+
+        function setBlackBackground() {
+            sendCommand({ action: 'set_bg', bgType: 'NONE' });
+            showToast('Latar Hitam Pekat (Blackout)', '🖤');
+        }
+
+        function toggleSplitScreen() {
+            sendCommand({ action: 'toggle_split_screen' });
+            showToast('Toggle Split Screen', '🔲');
+        }
+
+        function setBgMedia(mediaId, title) {
+            sendCommand({ action: 'set_bg_media', mediaId: mediaId });
+            showToast('Ganti Background: ' + title, '🖼️');
+        }
+
+        function focusQuickAdd(camNum) {
+            const nameInput = document.getElementById('quick-cam-name');
+            nameInput.value = 'DroidCam CAM ' + camNum;
+            document.getElementById('quick-cam-ip').focus();
+        }
+
+        function addAndLiveDroidCam() {
+            const name = document.getElementById('quick-cam-name').value.trim() || 'DroidCam';
+            const ip = document.getElementById('quick-cam-ip').value.trim();
+            const port = document.getElementById('quick-cam-port').value.trim() || '4747';
+
+            if (!ip) {
+                alert('Silakan masukkan IP HP DroidCam!');
+                return;
+            }
+
+            sendCommand({
+                action: 'add_droidcam_and_set_live',
+                title: name,
+                ip: ip,
+                port: port
+            });
+
+            document.getElementById('quick-cam-ip').value = '';
+            showToast('Menghubungkan ' + name + ' & Cut Live...', '📡');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function connectWebSocket() {
+            const loc = window.location;
+            const wsProtocol = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = wsProtocol + '//' + loc.host + '/ws';
+
+            try {
+                ws = new WebSocket(wsUrl);
+                ws.onopen = () => {
+                    const badge = document.getElementById('status-badge');
+                    badge.className = 'status-badge';
+                    document.getElementById('status-text').innerText = 'TERHUBUNG';
+                };
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateUI(data);
+                    } catch (e) {}
+                };
+                ws.onclose = () => {
+                    const badge = document.getElementById('status-badge');
+                    badge.className = 'status-badge disconnected';
+                    document.getElementById('status-text').innerText = 'RECONNECTING...';
+                    setTimeout(connectWebSocket, 1500);
+                };
+                ws.onerror = () => {
+                    ws.close();
+                };
+            } catch (e) {
+                setTimeout(connectWebSocket, 2000);
+            }
+        }
+
+        // Initialize
+        fetch('/api/state').then(r => r.json()).then(updateUI).catch(() => {});
+        connectWebSocket();
+    </script>
+</body>
+</html>"""
+    }
 }
+
 

@@ -1,14 +1,19 @@
-# 🌟 Layar Ibadah Pro (Android Live Presentation System)
+# 🌟 Altari Digital (Android Live Church Presentation & Multi-Camera Switcher)
 
-Aplikasi presentasi live modern berbasis Android yang dirancang khusus untuk mempermudah pelayanan multimedia di gereja maupun event live. Mengubah perangkat tablet atau smartphone Anda menjadi konsol operator presentasi kelas profesional yang praktis dan efisien.
+**Altari Digital** adalah sistem presentasi ibadah live modern berbasis Android yang dirancang khusus untuk mempermudah pelayanan multimedia di gereja maupun event live. Mengubah perangkat tablet atau smartphone Anda menjadi konsol operator presentasi dan pengalih multi-kamera kelas profesional yang praktis dan efisien.
 
-Tidak perlu lagi setup PC/Laptop yang berat dan ribet! Dengan aplikasi ini, Anda bisa mengatur lirik lagu, ayat Alkitab, video background, hingga *Stage Monitor* (layar panggung) langsung dari ujung jari Anda dengan mobilitas tinggi.
+Tidak perlu lagi setup PC/Laptop yang berat dan ribet! Dengan **Altari Digital**, Anda bisa mengatur lirik lagu, ayat Alkitab, video background, multi-kamera live (DroidCam/IP Cam), hingga *Stage Monitor* (layar panggung) langsung dari ujung jari Anda dengan mobilitas tinggi.
 
-## ✨ Fitur Unggulan yang Menjual
+## ✨ Fitur Unggulan Altari Digital
 
 ### 🎛️ Konsol Operator Profesional (Dual Monitor)
 - **Preview & Live Program**: Tampilan terpisah secara tegas antara apa yang sedang dipersiapkan di ruang kontrol (Preview) dan apa yang sedang tayang ke jemaat di proyektor utama (Live).
 - **Tombol Reaksi Cepat**: Akses navigasi super cepat dengan tombol transisi (Go Live, Prev, Next), serta kontrol keadaan darurat seperti layar gelap (*Black*) dan bersihkan teks (*Clear*).
+
+### 🎬 Pengalih Multi-Kamera 2x2 Grid (Video Switcher Mini)
+- **Multi-View Preview**: Tinjau hingga 4 sumber kamera (Kamera HP Utama + Kamera Nirkabel DroidCam/IP Camera) secara bersamaan di Web Remote (`/remote`).
+- **Sistem Lampu Tally Broadcast**: Indikator warna PGM (Merah Live), PVW (Hijau Siap), dan Split Screen.
+- **Instant Cut & Split Screen**: Potong langsung sudut kamera terbaik ke layar proyektor atau tampilkan teks berdampingan dengan kamera.
 
 ### 🎵 Manajemen Lagu & Order Ibadah Pintar
 - **Susunan Ibadah (Playlist)**: Siapkan seluruh urutan pujian penyembahan dan firman sebelum ibadah dimulai.
@@ -26,17 +31,20 @@ Layar pintar khusus untuk membantu pengkhotbah, WL (Worship Leader), dan pemusik
 - **Jam Digital Realtime**: Layar tidak akan membiarkan pembicara kehilangan arah waktu.
 - **Pesan Kilat Nirkabel (Flash Messages)**: Operator multimedia dapat mengetik pesan rahasia dari belakang yang akan berkedip langsung di layar monitor panggung (Contoh: *"Waktu sisa 5 menit"*, *"Mohon kembali ke Reff"*, *"Geser ke tengah"*).
 
+### 📱 Web Remote Khusus Kru Multimedia
+- Akses remote nirkabel via Wi-Fi lokal untuk kru kamera dan operator background tanpa mengganggu konsol utama lirik dan Alkitab.
+
 ### 🎨 Antarmuka Modern "Dark Studio"
 Desain antarmuka gelap (Dark Mode) eksklusif bergaya studio *broadcasting*, dioptimalkan agar mata operator tidak cepat lelah saat bertugas di ruang FOH (Front of House) atau multimedia yang minim cahaya.
 
 ---
 
 ## 🤝 Layanan & Kustomisasi
-Bawa sistem presentasi visual gereja atau komunitas Anda ke level berikutnya dengan ekosistem digital yang modern!
+Bawa sistem presentasi visual gereja atau komunitas Anda ke level berikutnya dengan **Altari Digital**!
 
 **Tertarik untuk menggunakan, membeli lisensi, atau membutuhkan penyesuaian aplikasi (custom request) khusus untuk gereja Anda?**
 
 Jika berminat bisa menghubungi:
 📞 **Andreas - 082120005958** (WhatsApp/Telepon)
 
-*Upgrade tayangan visual ibadah Anda hari ini.*
+*Upgrade tayangan visual ibadah Anda hari ini bersama Altari Digital.*

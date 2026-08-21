@@ -374,6 +374,24 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         return media
     }
 
+    fun removeMedia(id: String) {
+        mediaLibrary.removeAll { it.id == id }
+    }
+
+    fun updateDroidCamMedia(id: String, title: String, ip: String, port: String) {
+        val cleanIp = ip.trim().removePrefix("http://").removePrefix("https://").removeSuffix("/")
+        val cleanPort = port.trim().ifEmpty { "4747" }
+        val streamUrl = "http://$cleanIp:$cleanPort/video"
+        val index = mediaLibrary.indexOfFirst { it.id == id }
+        if (index != -1) {
+            mediaLibrary[index] = IpCameraContent(
+                id = id,
+                title = title.ifEmpty { "DroidCam ($cleanIp)" },
+                streamUrl = streamUrl
+            )
+        }
+    }
+
     fun goCustomText(title: String, text: String, type: String = "LYRICS") {
         val slides = text.split("\n\n").map { it.trim() }.filter { it.isNotEmpty() }
         val finalSlides = if (slides.isEmpty()) listOf(text.trim()) else slides

@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Church Multimedia System"
+rootProject.name = "Altari Digital"
 
 include(":app")

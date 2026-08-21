@@ -1,6 +1,6 @@
 {
-  "name": "Church Multimedia System",
-  "description": "Professional church presentation system modularized for Android controllers and external displays.",
+  "name": "Altari Digital",
+  "description": "Altari Digital - Sistem Presentasi Ibadah Live, Multi-Kamera Switcher, dan Stage Display modern berbasis Android.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

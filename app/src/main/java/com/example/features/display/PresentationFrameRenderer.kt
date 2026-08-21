@@ -378,9 +378,11 @@ private fun SinglePresentationContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Church Presentation System",
+                            text = "Altari Digital",
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
                             textAlign = TextAlign.Center
                         )
                     }
