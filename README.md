@@ -1,3 +1,6 @@
+APLIKASI GRATIS DAPAT DIGUNAKAN SEMUA GEREJA DAN KALANGAN UNTUK KEMULIAAN NAMA TUHAN.
+
+
 # 🌟 Altari Digital (Android Live Church Presentation & Multi-Camera Switcher)
 
 **Altari Digital** adalah sistem presentasi ibadah live modern berbasis Android yang dirancang khusus untuk mempermudah pelayanan multimedia di gereja maupun event live. Mengubah perangkat tablet atau smartphone Anda menjadi konsol operator presentasi dan pengalih multi-kamera kelas profesional yang praktis dan efisien.
@@ -42,7 +45,7 @@ Desain antarmuka gelap (Dark Mode) eksklusif bergaya studio *broadcasting*, diop
 ## 🤝 Layanan & Kustomisasi
 Bawa sistem presentasi visual gereja atau komunitas Anda ke level berikutnya dengan **Altari Digital**!
 
-**Tertarik untuk menggunakan, membeli lisensi, atau membutuhkan penyesuaian aplikasi (custom request) khusus untuk gereja Anda?**
+**Tertarik untuk menggunakan, atau membutuhkan penyesuaian aplikasi (custom request) khusus untuk gereja Anda, Menemukan Bug yang perlu segera di FIX?**
 
 Jika berminat bisa menghubungi:
 📞 **Andreas - 082120005958** (WhatsApp/Telepon)
