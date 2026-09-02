@@ -28,6 +28,7 @@ import com.example.presentation.PresentationStatus
 import com.example.features.display.DisplayProfileType
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
+import androidx.compose.animation.togetherWith
 import kotlin.math.abs
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -460,11 +461,20 @@ private fun RenderFlexibleTextBox(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
             }
-            Text(
-                text = text,
-                style = textStyle,
-                modifier = Modifier.fillMaxWidth()
-            )
+            androidx.compose.animation.AnimatedContent(
+                targetState = text,
+                transitionSpec = {
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) togetherWith
+                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                },
+                label = "TextAnimation"
+            ) { targetText ->
+                Text(
+                    text = targetText,
+                    style = textStyle,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
