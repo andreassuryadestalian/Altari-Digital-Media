@@ -39,7 +39,8 @@ fun VideoPlayer(
     isMuted: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    if (videoUri.startsWith("http://") || videoUri.startsWith("https://")) {
+    val isIpCamera = (videoUri.startsWith("http") && !videoUri.lowercase().endsWith(".mp4") && !videoUri.lowercase().endsWith(".m3u8") && !videoUri.lowercase().endsWith(".webm"))
+    if (isIpCamera) {
         IpCameraStreamPlayer(
             streamUrl = videoUri,
             modifier = modifier

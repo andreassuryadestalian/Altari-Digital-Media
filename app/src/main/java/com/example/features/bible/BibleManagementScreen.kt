@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.BibleContent
 import com.example.model.PresentationContent
+import com.example.api.BibleApiService
+import com.example.api.KjvApiService
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,118 +29,204 @@ fun BibleManagementScreen(
     onSelectForGo: (PresentationContent) -> Unit,
     onAddToPlaylist: ((PresentationContent) -> Unit)? = null
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedTranslation by remember { mutableStateOf("NIV") }
+    val coroutineScope = rememberCoroutineScope()
+    val bibleApi = remember { BibleApiService.create() }
+    val kjvApi = remember { KjvApiService.create() }
 
-    val samplePassages = remember {
-        listOf(
-            BibleContent(
-                id = "b1",
-                title = "John 3:16-17 ($selectedTranslation)",
-                bookAndChapter = "John 3",
-                verses = listOf(
-                    "16 For God so loved the world that he gave his one and only Son, that whoever believes in him shall not perish but have eternal life.",
-                    "17 For God did not send his Son into the world to condemn the world, but to save the world through him."
-                )
-            ),
-            BibleContent(
-                id = "b2",
-                title = "Psalm 23:1-6 ($selectedTranslation)",
-                bookAndChapter = "Psalm 23",
-                verses = listOf(
-                    "1 The LORD is my shepherd, I lack nothing.",
-                    "2 He makes me lie down in green pastures, he leads me beside quiet waters,",
-                    "3 He refreshes my soul. He guides me along the right paths for his name's sake.",
-                    "4 Even though I walk through the darkest valley, I will fear no evil, for you are with me.",
-                    "5 You prepare a table before me in the presence of my enemies. You anoint my head with oil; my cup overflows.",
-                    "6 Surely your goodness and love will follow me all the days of my life, and I will dwell in the house of the LORD forever."
-                )
-            ),
-            BibleContent(
-                id = "b3",
-                title = "Genesis 1:1-3 ($selectedTranslation)",
-                bookAndChapter = "Genesis 1",
-                verses = listOf(
-                    "1 In the beginning God created the heavens and the earth.",
-                    "2 Now the earth was formless and empty, darkness was over the surface of the deep, and the Spirit of God was hovering over the waters.",
-                    "3 And God said, 'Let there be light,' and there was light."
-                )
-            ),
-            BibleContent(
-                id = "b4",
-                title = "Philippians 4:13 ($selectedTranslation)",
-                bookAndChapter = "Philippians 4",
-                verses = listOf(
-                    "13 I can do all this through him who gives me strength."
-                )
-            ),
-            BibleContent(
-                id = "b5",
-                title = "Yohanes 14:6 (TB)",
-                bookAndChapter = "Yohanes 14",
-                verses = listOf(
-                    "6 Kata Yesus kepadanya: 'Akulah jalan dan kebenaran dan hidup. Tidak ada seorangpun yang datang kepada Bapa, kalau tidak melalui Aku.'"
+    var searchQuery by remember { mutableStateOf("") }
+    
+    // API Fetch states
+    var inputBook by remember { mutableStateOf("Yohanes") }
+    var inputChapter by remember { mutableStateOf("3") }
+    var selectedVersion by remember { mutableStateOf("TB") } // TB or KJV
+    var isLoading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    var passages by remember {
+        mutableStateOf(
+            listOf(
+                BibleContent(
+                    id = "b1",
+                    title = "Yohanes 3:16-17 (TB)",
+                    bookAndChapter = "Yohanes 3",
+                    verses = listOf(
+                        "16 Karena begitu besar kasih Allah akan dunia ini, sehingga Ia telah mengaruniakan Anak-Nya yang tunggal, supaya setiap orang yang percaya kepada-Nya tidak binasa, melainkan beroleh hidup yang kekal.",
+                        "17 Sebab Allah mengutus Anak-Nya ke dalam dunia bukan untuk menghakimi dunia, melainkan untuk menyelamatkannya oleh Dia."
+                    )
+                ),
+                BibleContent(
+                    id = "b2",
+                    title = "John 3:16 (KJV)",
+                    bookAndChapter = "John 3",
+                    verses = listOf(
+                        "16 For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
+                    )
                 )
             )
         )
     }
 
-    var selectedPassage by remember { mutableStateOf<BibleContent?>(samplePassages.firstOrNull()) }
+    var selectedPassage by remember { mutableStateOf<BibleContent?>(passages.firstOrNull()) }
 
-    val filteredPassages = samplePassages.filter {
+    val filteredPassages = passages.filter {
         it.title.contains(searchQuery, ignoreCase = true) ||
-                it.verses.any { v -> v.contains(searchQuery, ignoreCase = true) }
+        it.verses.any { verse -> verse.contains(searchQuery, ignoreCase = true) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF1C1B1F))
-            .padding(16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // --- API Search Box ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2D2A37)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column {
-                Text(
-                    text = "BIBLE & SCRIPTURE ENGINE",
-                    color = Color(0xFFE6E1E9),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Instant Scripture projection for sermons & scripture readings",
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
-            }
-
-            // Translation Switcher
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("NIV", "TB", "KJV", "ESV").forEach { trans ->
-                    FilterChip(
-                        selected = selectedTranslation == trans,
-                        onClick = { selectedTranslation = trans },
-                        label = { Text(trans, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF381E72),
-                            selectedLabelColor = Color(0xFFD0BCFF)
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔍 Ambil Ayat dari Alkitab (Otomatis)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    
+                    Row(
+                        modifier = Modifier.background(Color(0xFF1C1B1F), RoundedCornerShape(8.dp)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "TB (Indo)",
+                            color = if (selectedVersion == "TB") Color.White else Color.Gray,
+                            fontWeight = if (selectedVersion == "TB") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .clickable { selectedVersion = "TB" }
+                                .background(if (selectedVersion == "TB") Color(0xFF381E72) else Color.Transparent, RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                        Text(
+                            text = "KJV (Eng)",
+                            color = if (selectedVersion == "KJV") Color.White else Color.Gray,
+                            fontWeight = if (selectedVersion == "KJV") FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .clickable { selectedVersion = "KJV" }
+                                .background(if (selectedVersion == "KJV") Color(0xFF381E72) else Color.Transparent, RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = inputBook,
+                        onValueChange = { inputBook = it },
+                        label = { Text("Kitab (cth: Yohanes / John)", color = Color.Gray, fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFD0BCFF),
+                            unfocusedBorderColor = Color(0xFF49454F),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
                         )
                     )
+                    OutlinedTextField(
+                        value = inputChapter,
+                        onValueChange = { inputChapter = it },
+                        label = { Text("Pasal (cth: 3)", color = Color.Gray, fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.width(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFD0BCFF),
+                            unfocusedBorderColor = Color(0xFF49454F),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    Button(
+                        onClick = {
+                            if (inputBook.isNotBlank() && inputChapter.isNotBlank()) {
+                                isLoading = true
+                                errorMessage = null
+                                coroutineScope.launch {
+                                    try {
+                                        val chapterInt = inputChapter.toIntOrNull() ?: 1
+                                        if (selectedVersion == "TB") {
+                                            val response = bibleApi.getChapter(inputBook, chapterInt)
+                                            val data = response.data
+                                            if (data?.verses != null && data.verses.isNotEmpty()) {
+                                                val validVerses = data.verses.filter { it.type == "content" }
+                                                val mappedVerses = validVerses.map { "${it.verse} ${it.content}" }
+                                                val newContent = BibleContent(
+                                                    id = "api_${System.currentTimeMillis()}",
+                                                    title = "${data.book?.name ?: inputBook} ${data.book?.chapter ?: inputChapter} (TB)",
+                                                    bookAndChapter = "${data.book?.name ?: inputBook} ${data.book?.chapter ?: inputChapter}",
+                                                    verses = mappedVerses
+                                                )
+                                                passages = listOf(newContent) + passages
+                                                selectedPassage = newContent
+                                                searchQuery = "" // Reset search
+                                            } else {
+                                                errorMessage = "Ayat tidak ditemukan."
+                                            }
+                                        } else {
+                                            // Fetch KJV
+                                            val query = "$inputBook+$chapterInt"
+                                            val response = kjvApi.getPassage(query)
+                                            if (response.verses != null && response.verses.isNotEmpty()) {
+                                                val mappedVerses = response.verses.map { "${it.verse} ${it.text.trim()}" }
+                                                val ref = response.reference ?: "$inputBook $chapterInt"
+                                                val newContent = BibleContent(
+                                                    id = "api_${System.currentTimeMillis()}",
+                                                    title = "$ref (KJV)",
+                                                    bookAndChapter = ref,
+                                                    verses = mappedVerses
+                                                )
+                                                passages = listOf(newContent) + passages
+                                                selectedPassage = newContent
+                                                searchQuery = ""
+                                            } else {
+                                                errorMessage = "Ayat tidak ditemukan."
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        errorMessage = "Gagal mengambil data: ${e.localizedMessage}"
+                                    } finally {
+                                        isLoading = false
+                                    }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        enabled = !isLoading
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Ambil", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(errorMessage!!, color = Color.Red, fontSize = 12.sp)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Search Bar
+        // --- Filter Search Bar ---
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search passage or keyword (e.g. John 3, Psalm 23, shepherd...)", color = Color.Gray, fontSize = 13.sp) },
+            placeholder = { Text("Cari ayat yang sudah tersimpan...", color = Color.Gray, fontSize = 13.sp) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
@@ -147,7 +236,6 @@ fun BibleManagementScreen(
                 unfocusedTextColor = Color.White
             )
         )
-
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(
@@ -164,13 +252,12 @@ fun BibleManagementScreen(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "Scripture Bookmarks",
+                        text = "📖 Daftar Ayat Disimpan",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxSize()
@@ -240,12 +327,11 @@ fun BibleManagementScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "${passage.verses.size} Verses Ready",
+                                    text = "${passage.verses.size} Ayat",
                                     color = Color.Gray,
                                     fontSize = 12.sp
                                 )
                             }
-
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 onAddToPlaylist?.let { addFn ->
                                     Button(
@@ -255,14 +341,12 @@ fun BibleManagementScreen(
                                         Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     }
                                 }
-
                                 Button(
                                     onClick = { onSelectForPreview(passage) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
                                 ) {
                                     Text("Preview", fontSize = 12.sp)
                                 }
-
                                 Button(
                                     onClick = { onSelectForGo(passage) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
@@ -271,9 +355,7 @@ fun BibleManagementScreen(
                                 }
                             }
                         }
-
                         Spacer(modifier = Modifier.height(12.dp))
-
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxSize()
@@ -302,7 +384,7 @@ fun BibleManagementScreen(
                     }
                 } else {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Select a Bible passage to view verses", color = Color.Gray)
+                        Text("Pilih atau cari ayat untuk melihat isi", color = Color.Gray)
                     }
                 }
             }

@@ -28,6 +28,9 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
     )
 
     val mediaLibrary = mutableListOf<PresentationContent>(
+        VideoContent("bg_vid_1", "Galaxy Loop (MP4)", "https://cdn.pixabay.com/video/2020/05/25/40149-425482381_large.mp4"),
+        ImageContent("bg_gif_1", "Abstract Colors (GIF)", "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif"),
+        ImageContent("bg_img_1", "Cross Minimalist (JPG)", "https://images.unsplash.com/photo-1548291410-63ce734612d4?q=80&w=1280&auto=format&fit=crop"),
         IpCameraContent("droid1", "DroidCam HP (Wireless Stream)", "http://192.168.1.50:4747/video"),
         CameraContent("cam1", "Kamera HP Utama (Local Cam)", "0")
     )

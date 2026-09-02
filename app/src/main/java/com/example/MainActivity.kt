@@ -1,6 +1,10 @@
 package com.example
 
 import android.os.Bundle
+import coil.ImageLoader
+import coil.Coil
+import coil.decode.ImageDecoderDecoder
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +21,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val imageLoader = ImageLoader.Builder(this)
+            .components { 
+                if (Build.VERSION.SDK_INT >= 28) { 
+                    add(ImageDecoderDecoder.Factory()) 
+                } else { 
+                    add(coil.decode.GifDecoder.Factory()) 
+                } 
+            }
+            .build()
+        Coil.setImageLoader(imageLoader)
         
         // Prevent background thread or server exceptions from crashing the Android application process
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
