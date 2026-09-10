@@ -373,7 +373,10 @@ fun SettingsScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             FilterChip(
                                 selected = !selectedCameraFacing,
-                                onClick = { selectedCameraFacing = false },
+                                onClick = {
+                                    selectedCameraFacing = false
+                                    com.example.features.camera.CameraStreamManager.setUseFrontCamera(false)
+                                },
                                 label = { Text("Kamera Belakang", fontSize = 10.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Color(0xFF381E72),
@@ -382,7 +385,10 @@ fun SettingsScreen(
                             )
                             FilterChip(
                                 selected = selectedCameraFacing,
-                                onClick = { selectedCameraFacing = true },
+                                onClick = {
+                                    selectedCameraFacing = true
+                                    com.example.features.camera.CameraStreamManager.setUseFrontCamera(true)
+                                },
                                 label = { Text("Depan", fontSize = 10.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Color(0xFF381E72),

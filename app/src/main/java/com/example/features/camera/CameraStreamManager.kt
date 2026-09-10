@@ -16,8 +16,22 @@ object CameraStreamManager {
     private val _latestImageBitmap = MutableStateFlow<ImageBitmap?>(null)
     val latestImageBitmap: StateFlow<ImageBitmap?> = _latestImageBitmap.asStateFlow()
 
+    private val _useFrontCamera = MutableStateFlow(false)
+    val useFrontCamera: StateFlow<Boolean> = _useFrontCamera.asStateFlow()
+
+    private val _cameraStateMessage = MutableStateFlow<String?>(null)
+    val cameraStateMessage: StateFlow<String?> = _cameraStateMessage.asStateFlow()
+
     @Volatile
     private var lastFrameTime = 0L
+
+    fun setUseFrontCamera(front: Boolean) {
+        _useFrontCamera.value = front
+    }
+
+    fun setCameraStateMessage(msg: String?) {
+        _cameraStateMessage.value = msg
+    }
 
     fun onNewFrame(bitmap: Bitmap, rotationDegrees: Int = 0) {
         val now = System.currentTimeMillis()
@@ -35,15 +49,15 @@ object CameraStreamManager {
 
             // Expose for Compose rendering without decoding overhead
             _latestImageBitmap.value = finalBitmap.asImageBitmap()
+            _cameraStateMessage.value = null
 
             val stream = ByteArrayOutputStream()
             // Compress JPEG at 75% quality for fast network streaming
             finalBitmap.compress(Bitmap.CompressFormat.JPEG, 75, stream)
             _latestFrame.value = stream.toByteArray()
 
-            if (finalBitmap != bitmap) {
-                finalBitmap.recycle()
-            }
+            // NOTE: Do NOT call finalBitmap.recycle() here because finalBitmap.asImageBitmap()
+            // is actively referenced by Compose for rendering. Android native GC reclaims bitmaps safely.
         } catch (e: Throwable) {
             e.printStackTrace()
         }

@@ -28,6 +28,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
+import com.example.db.AppDatabase
+import com.example.db.PresentationRepository
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +90,10 @@ enum class NavigationTab(val label: String, val icon: String) {
 
 @Composable
 fun DashboardScreen(server: PresentationServer) {
+    val context = LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val database = remember { AppDatabase.getDatabase(context) }
+    val repository = remember { PresentationRepository(database) }
     val presentationState by server.state.collectAsState()
     var selectedTab by remember { mutableStateOf(NavigationTab.DASHBOARD) }
 
@@ -97,12 +105,81 @@ fun DashboardScreen(server: PresentationServer) {
     var previewSlideIndex by remember { mutableStateOf(0) }
 
     // Library items state initialized from server single source of truth
-    val songsLibrary = remember {
-        mutableStateListOf<LyricsContent>().apply {
-            addAll(server.songsLibrary)
+    val dbSongs by repository.allLyrics.collectAsStateWithLifecycle(initialValue = emptyList())
+    val dbBibleVerses by repository.allBibleVerses.collectAsStateWithLifecycle(initialValue = emptyList())
+
+    val hasPrepopulated = remember { context.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE).getBoolean("prepopulated", false) }
+    val hasPrepopulatedBible = remember { context.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE).getBoolean("prepopulated_bible", false) }
+
+    LaunchedEffect(dbSongs) {
+        if (!hasPrepopulated) {
+            if (dbSongs.isEmpty()) {
+                server.songsLibrary.forEach { song ->
+                    repository.insertLyric(song)
+                }
+            }
+            context.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE).edit().putBoolean("prepopulated", true).apply()
+        } else {
+            if (dbSongs.isNotEmpty() || hasPrepopulated) { // Ensure we sync back even if empty, after pre-population
+                server.songsLibrary.clear()
+                server.songsLibrary.addAll(dbSongs)
+            }
         }
     }
 
+    LaunchedEffect(dbBibleVerses) {
+        if (!hasPrepopulatedBible && dbBibleVerses.isEmpty()) {
+            val initialVerses = listOf(
+                BibleContent(
+                    id = "init_yoh_3_16",
+                    title = "Yohanes 3:16-17 (TB)",
+                    bookAndChapter = "Yohanes 3:16-17",
+                    verses = listOf(
+                        "16 Karena begitu besar kasih Allah akan dunia ini, sehingga Ia telah mengaruniakan Anak-Nya yang tunggal, supaya setiap orang yang percaya kepada-Nya tidak binasa, melainkan beroleh hidup yang kekal.",
+                        "17 Sebab Allah mengutus Anak-Nya ke dalam dunia bukan untuk menghakimi dunia, melainkan untuk menyelamatkannya oleh Dia."
+                    )
+                ),
+                BibleContent(
+                    id = "init_mazmur_23",
+                    title = "Mazmur 23:1-6 (TB)",
+                    bookAndChapter = "Mazmur 23:1-6",
+                    verses = listOf(
+                        "1 TUHAN adalah gembalaku, takkan kekurangan aku.",
+                        "2 Ia membaringkan aku di padang yang berumput hijau, Ia membimbing aku ke air yang tenang;",
+                        "3 Ia menyegarkan jiwaku. Ia menuntun aku di jalan yang benar oleh karena nama-Nya.",
+                        "4 Sekalipun aku berjalan dalam lembah kekelaman, aku tidak takut bahaya, sebab Engkau besertaku; gada-Mu dan tongkat-Mu, itulah yang menghibur aku.",
+                        "5 Engkau menyediakan hidangan bagiku, di hadapan lawanku; Engkau mengurapi kepalaku dengan minyak; pialaku penuh melimpah.",
+                        "6 Kebajikan dan kemurahan belaka akan mengikuti aku, seumur hidupku; dan aku akan diam dalam rumah TUHAN sepanjang masa."
+                    )
+                ),
+                BibleContent(
+                    id = "init_filipi_4",
+                    title = "Filipi 4:6-7 (TB)",
+                    bookAndChapter = "Filipi 4:6-7",
+                    verses = listOf(
+                        "6 Janganlah hendaknya kamu kuatir tentang apapun juga, tetapi nyatakanlah dalam segala hal keinginanmu kepada Allah dalam doa dan permohonan dengan ucapan syukur.",
+                        "7 Damai sejahtera Allah, yang melampaui segala akal, akan memelihara hati dan pikiranmu dalam Kristus Yesus."
+                    )
+                ),
+                BibleContent(
+                    id = "init_matius_6",
+                    title = "Matius 6:9-13 (Doa Bapa Kami)",
+                    bookAndChapter = "Matius 6:9-13",
+                    verses = listOf(
+                        "9 Bapa kami yang di sorga, Dikuduskanlah nama-Mu,",
+                        "10 datanglah Kerajaan-Mu, jadilah kehendak-Mu di bumi seperti di sorga.",
+                        "11 Berikanlah kami pada hari ini makanan kami yang secukupnya",
+                        "12 dan ampunilah kami akan kesalahan kami, seperti kami juga mengampuni orang yang bersalah kepada kami;",
+                        "13 dan janganlah membawa kami ke dalam pencobaan, tetapi lepaskanlah kami dari pada yang jahat. Karena Engkaulah yang empunya Kerajaan dan kuasa dan kemuliaan sampai selama-lamanya. Amin."
+                    )
+                )
+            )
+            initialVerses.forEach { verse ->
+                repository.insertBibleVerse(verse)
+            }
+            context.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE).edit().putBoolean("prepopulated_bible", true).apply()
+        }
+    }
     val mediaLibrary = remember {
         mutableStateListOf<PresentationContent>().apply {
             addAll(server.mediaLibrary)
@@ -119,15 +196,15 @@ fun DashboardScreen(server: PresentationServer) {
                 id = "p1",
                 name = "Ibadah Minggu Pagi",
                 items = mutableStateListOf<PresentationContent>().apply {
-                    if (songsLibrary.isNotEmpty()) add(songsLibrary[0])
-                    if (songsLibrary.size > 1) add(songsLibrary[1])
+                    if (dbSongs.isNotEmpty()) add(dbSongs[0])
+                    if (dbSongs.size > 1) add(dbSongs[1])
                 }
             ),
             ServicePlaylist(
                 id = "p2",
                 name = "Ibadah Pemuda / Youth",
                 items = mutableStateListOf<PresentationContent>().apply {
-                    if (songsLibrary.size > 2) add(songsLibrary[2])
+                    if (dbSongs.size > 2) add(dbSongs[2])
                 }
             ),
             ServicePlaylist(
@@ -155,8 +232,8 @@ fun DashboardScreen(server: PresentationServer) {
 
     // Default preview item initialization
     LaunchedEffect(Unit) {
-        if (previewContent == null && songsLibrary.isNotEmpty()) {
-            previewContent = songsLibrary[0]
+        if (previewContent == null && dbSongs.isNotEmpty()) {
+            previewContent = dbSongs[0]
         }
     }
 
@@ -175,11 +252,8 @@ fun DashboardScreen(server: PresentationServer) {
             .fillMaxSize()
             .background(BgMain)
     ) {
-        // Persistent Hidden Camera Preview to ensure continuous background capture
-        // even when not actively displayed on the main projection/preview
-        Box(modifier = Modifier.size(1.dp).alpha(0.01f)) {
-            com.example.features.camera.CameraPreview()
-        }
+        // Continuous background camera capture host for local UI rendering & network streaming
+        com.example.features.camera.CameraCaptureHost()
 
         TopBar(
             server = server,
@@ -199,7 +273,7 @@ fun DashboardScreen(server: PresentationServer) {
                         presentationState = presentationState,
                         previewContent = previewContent,
                         previewSlideIndex = previewSlideIndex,
-                        songsLibrary = songsLibrary,
+                        dbSongs = dbSongs,
                         playlists = playlists,
                         activePlaylistId = activePlaylistId,
                         onSelectActivePlaylist = { activePlaylistId = it },
@@ -222,7 +296,7 @@ fun DashboardScreen(server: PresentationServer) {
                         presentationState = presentationState,
                         previewContent = previewContent,
                         previewSlideIndex = previewSlideIndex,
-                        songsLibrary = songsLibrary,
+                        dbSongs = dbSongs,
                         playlists = playlists,
                         activePlaylistId = activePlaylistId,
                         onSelectActivePlaylist = { activePlaylistId = it },
@@ -246,16 +320,16 @@ fun DashboardScreen(server: PresentationServer) {
             }
             NavigationTab.LYRICS -> {
                 LyricsManagementScreen(
-                    songsList = songsLibrary,
+                    repository = repository,
+                    songsList = dbSongs,
                     onAddSong = { newSong ->
-                        val index = songsLibrary.indexOfFirst { it.id == newSong.id }
-                        if (index >= 0) {
-                            songsLibrary[index] = newSong
-                            val sIdx = server.songsLibrary.indexOfFirst { it.id == newSong.id }
-                            if (sIdx >= 0) server.songsLibrary[sIdx] = newSong else server.songsLibrary.add(newSong)
-                        } else {
-                            songsLibrary.add(newSong)
-                            server.songsLibrary.add(newSong)
+                        coroutineScope.launch {
+                            repository.insertLyric(newSong)
+                        }
+                    },
+                    onDeleteSong = { song ->
+                        coroutineScope.launch {
+                            repository.deleteLyric(song.id)
                         }
                     },
                     onSelectForPreview = {
@@ -275,7 +349,7 @@ fun DashboardScreen(server: PresentationServer) {
                 )
             }
             NavigationTab.BIBLE -> {
-                BibleManagementScreen(
+                BibleManagementScreen(repository = repository,
                     onSelectForPreview = {
                         previewContent = it
                         previewSlideIndex = 0
@@ -673,7 +747,7 @@ fun LandscapeOperatorConsole(
     presentationState: PresentationState,
     previewContent: PresentationContent?,
     previewSlideIndex: Int,
-    songsLibrary: List<LyricsContent>,
+    dbSongs: List<LyricsContent>,
     playlists: List<ServicePlaylist>,
     activePlaylistId: String,
     onSelectActivePlaylist: (String) -> Unit,
@@ -937,7 +1011,7 @@ fun LandscapeOperatorConsole(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
-                            items(songsLibrary) { song ->
+                            items(dbSongs) { song ->
                                 Surface(
                                     color = Color(0xFF1C1B1F),
                                     shape = RoundedCornerShape(4.dp),
@@ -1659,7 +1733,7 @@ fun PortraitOperatorConsole(
     presentationState: PresentationState,
     previewContent: PresentationContent?,
     previewSlideIndex: Int,
-    songsLibrary: List<LyricsContent>,
+    dbSongs: List<LyricsContent>,
     playlists: List<ServicePlaylist>,
     activePlaylistId: String,
     onSelectActivePlaylist: (String) -> Unit,
@@ -2165,7 +2239,7 @@ fun PortraitOperatorConsole(
 
                             Spacer(modifier = Modifier.height(6.dp))
 
-                            val filteredSongs = songsLibrary.filter {
+                            val filteredSongs = dbSongs.filter {
                                 it.title.contains(songSearchQuery, ignoreCase = true) ||
                                 it.slides.any { s -> s.contains(songSearchQuery, ignoreCase = true) }
                             }
@@ -2696,6 +2770,7 @@ fun WebRemoteDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
     val localIp = remember(server) { getLocalIpAddress(server.context) }
     val port = server.webServer.activePort

@@ -19,6 +19,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.db.PresentationRepository
 import com.example.model.LyricsContent
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -26,8 +28,10 @@ import java.io.InputStreamReader
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LyricsManagementScreen(
+    repository: PresentationRepository,
     songsList: List<LyricsContent>,
     onAddSong: (LyricsContent) -> Unit,
+    onDeleteSong: ((LyricsContent) -> Unit)? = null,
     onSelectForPreview: (LyricsContent) -> Unit,
     onSelectForGo: (LyricsContent) -> Unit,
     onAddToPlaylist: ((LyricsContent) -> Unit)? = null
@@ -36,6 +40,7 @@ fun LyricsManagementScreen(
     var searchQuery by remember { mutableStateOf("") }
     var showEditDialog by remember { mutableStateOf(false) }
     var editingSong by remember { mutableStateOf<LyricsContent?>(null) }
+    var songToDelete by remember { mutableStateOf<LyricsContent?>(null) }
 
     // TXT File Picker
     val txtLauncher = rememberLauncherForActivityResult(
@@ -188,6 +193,15 @@ fun LyricsManagementScreen(
                                 Text("Edit")
                             }
 
+                            onDeleteSong?.let { delFn ->
+                                OutlinedButton(
+                                    onClick = { songToDelete = song },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                                ) {
+                                    Text("Hapus", color = Color(0xFFEF4444))
+                                }
+                            }
+
                             Button(
                                 onClick = { onSelectForPreview(song) },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
@@ -263,6 +277,33 @@ fun LyricsManagementScreen(
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) {
                     Text("Cancel", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF2B2930)
+        )
+    }
+
+    // Delete Confirmation Dialog
+    if (songToDelete != null) {
+        val song = songToDelete!!
+        AlertDialog(
+            onDismissRequest = { songToDelete = null },
+            title = { Text("Hapus Lagu", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("Apakah Anda yakin ingin menghapus lagu \"${song.title}\" dari database offline?", color = Color(0xFFD4D4D8)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteSong?.invoke(song)
+                        songToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("Hapus Permanen", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { songToDelete = null }) {
+                    Text("Batal", color = Color.Gray)
                 }
             },
             containerColor = Color(0xFF2B2930)

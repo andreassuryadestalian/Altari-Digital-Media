@@ -184,6 +184,44 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                         sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
                         socket.close()
                     }
+                    path == "/api/timer" -> {
+                        val action = extractQueryParam(query, "action") ?: "toggle"
+                        when (action) {
+                            "start" -> presentationServer.startSermonTimer()
+                            "pause" -> presentationServer.pauseSermonTimer()
+                            "toggle", "toggle_timer" -> presentationServer.toggleSermonTimer()
+                            "reset", "reset_timer" -> presentationServer.resetSermonTimer()
+                            "add", "add_timer_minutes" -> {
+                                val mins = extractQueryParam(query, "minutes")?.toIntOrNull() ?: 5
+                                presentationServer.addSermonTimerMinutes(mins)
+                            }
+                            "set", "set_timer_minutes" -> {
+                                val mins = extractQueryParam(query, "minutes")?.toIntOrNull() ?: 30
+                                presentationServer.setSermonTimerDuration(mins)
+                            }
+                        }
+                        val json = buildStateJson()
+                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
+                        socket.close()
+                    }
+                    path == "/api/ticker" -> {
+                        val action = extractQueryParam(query, "action") ?: "toggle"
+                        val text = extractQueryParam(query, "text") ?: ""
+                        when (action) {
+                            "show" -> if (text.isNotEmpty()) presentationServer.showTicker(text)
+                            "hide" -> presentationServer.hideTicker()
+                            "toggle" -> {
+                                if (presentationServer.state.value.isTickerVisible) {
+                                    presentationServer.hideTicker()
+                                } else if (text.isNotEmpty() || !presentationServer.state.value.tickerText.isNullOrBlank()) {
+                                    presentationServer.showTicker(text.ifEmpty { presentationServer.state.value.tickerText ?: "" })
+                                }
+                            }
+                        }
+                        val json = buildStateJson()
+                        sendHttpResponse(output, 200, "OK", json.toByteArray(Charsets.UTF_8), "application/json; charset=UTF-8")
+                        socket.close()
+                    }
                     path == "/camera/stream" -> {
                         serveCameraStream(socket, output)
                         // Stream keeps running until socket closes
@@ -520,6 +558,25 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 presentationServer.sendStageAlert(msg)
             }
             "clear_stage_alert" -> presentationServer.clearStageAlert()
+            "show_ticker" -> {
+                val text = cmdJson.optString("text", "")
+                val speed = cmdJson.optInt("speed", 100)
+                if (text.isNotEmpty()) {
+                    presentationServer.showTicker(text, speed)
+                }
+            }
+            "hide_ticker" -> {
+                presentationServer.hideTicker()
+            }
+            "toggle_ticker" -> {
+                val text = cmdJson.optString("text", presentationServer.state.value.tickerText ?: "")
+                if (presentationServer.state.value.isTickerVisible) {
+                    presentationServer.hideTicker()
+                } else if (text.isNotBlank()) {
+                    val speed = cmdJson.optInt("speed", 100)
+                    presentationServer.showTicker(text, speed)
+                }
+            }
             "clear_bg" -> {
                 presentationServer.clearBackground()
             }
@@ -903,6 +960,13 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("stageAlertMessage", state.stageAlertMessage ?: "")
             json.put("isStageAlertActive", state.isStageAlertActive)
 
+            // Ticker / Running Text
+            json.put("isTickerVisible", state.isTickerVisible)
+            json.put("tickerText", state.tickerText ?: "")
+            json.put("tickerSpeed", state.tickerSpeed)
+            json.put("tickerBackgroundColorRgb", state.tickerBackgroundColorRgb)
+            json.put("tickerTextColorRgb", state.tickerTextColorRgb)
+
             // Split Screen Feature
             json.put("isSplitScreenEnabled", state.isSplitScreenEnabled)
             json.put("splitRatioCamPercent", state.splitRatioCamPercent)
@@ -1248,6 +1312,35 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             letter-spacing: 0.5px;
         }
 
+        /* Ticker / Running Text Bar */
+        #ticker-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #CC0000;
+            color: #FFFFFF;
+            font-size: 32px;
+            font-weight: 800;
+            padding: 12px 0;
+            z-index: 100;
+            overflow: hidden;
+            white-space: nowrap;
+            display: none;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.7);
+        }
+
+        #ticker-content {
+            display: inline-block;
+            padding-left: 100%;
+            animation: tickerMarquee 20s linear infinite;
+        }
+
+        @keyframes tickerMarquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+
         /* Blackout Overlay */
         #blackout-layer {
             position: absolute;
@@ -1376,6 +1469,11 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             </svg>
             <h1>Altari Digital</h1>
             <p>Live Web Display • Ready to Present</p>
+        </div>
+
+        <!-- Ticker / Running Text Banner -->
+        <div id="ticker-bar">
+            <div id="ticker-content"></div>
         </div>
     </div>
 
@@ -1567,6 +1665,27 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             } else {
                 idleBanner.style.display = 'flex';
                 idleBanner.style.opacity = '1';
+            }
+
+            // Ticker / Running Text
+            const tickerBar = document.getElementById('ticker-bar');
+            const tickerContent = document.getElementById('ticker-content');
+            if (data.isTickerVisible && data.tickerText && data.tickerText.trim() !== '') {
+                tickerContent.innerText = data.tickerText;
+                if (data.tickerBackgroundColorRgb !== undefined) {
+                    const bgHex = '#' + ((data.tickerBackgroundColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.backgroundColor = bgHex;
+                }
+                if (data.tickerTextColorRgb !== undefined) {
+                    const textHex = '#' + ((data.tickerTextColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.color = textHex;
+                }
+                const speed = data.tickerSpeed || 100;
+                const duration = Math.max(8, Math.min(60, (data.tickerText.length * 15) / (speed || 100)));
+                tickerContent.style.animationDuration = duration + 's';
+                tickerBar.style.display = 'block';
+            } else {
+                tickerBar.style.display = 'none';
             }
         }
 
@@ -1958,6 +2077,76 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             white-space: pre-line;
         }
 
+        /* STAGE TIMER CONTROLS TOOLBAR */
+        #stage-timer-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            background: #18181b;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #27272a;
+            flex-wrap: wrap;
+        }
+
+        .st-btn {
+            background: #27272a;
+            color: #f4f4f5;
+            border: 1px solid #3f3f46;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .st-btn:hover {
+            background: #3f3f46;
+        }
+        .st-btn-primary {
+            background: #10b981;
+            color: #ffffff;
+            border-color: #059669;
+        }
+        .st-preset {
+            background: #1e1b4b;
+            color: #c7d2fe;
+            border-color: #3730a3;
+        }
+        .st-sep {
+            color: #52525b;
+            margin: 0 4px;
+        }
+
+        /* STAGE TICKER BANNER */
+        #stage-ticker-bar {
+            background: #991b1b;
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 800;
+            padding: 8px 16px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            white-space: nowrap;
+            display: none;
+            border: 2px solid #fbbf24;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+
+        #stage-ticker-content {
+            display: inline-block;
+            padding-left: 100%;
+            animation: stageMarquee 20s linear infinite;
+        }
+
+        @keyframes stageMarquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
+
         /* FULLSCREEN BUTTON */
         #btn-fs {
             position: fixed;
@@ -1985,10 +2174,29 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 </div>
             </div>
 
-            <div id="sermon-timer-box">
+            <div id="sermon-timer-box" onclick="toggleTimer()" title="Klik untuk Mulai / Jeda Timer" style="cursor: pointer;">
                 <div id="timer-status-badge" class="timer-normal">⏱️ KHOTBAH (READY)</div>
                 <div id="sermon-timer" class="timer-normal">30:00</div>
             </div>
+        </div>
+
+        <!-- Quick Stage Timer Toolbar -->
+        <div id="stage-timer-bar">
+            <button id="btn-timer-toggle" class="st-btn st-btn-primary" onclick="toggleTimer()">▶️ MULAI TIMER</button>
+            <button class="st-btn" onclick="resetTimer()">🔄 RESET</button>
+            <button class="st-btn" onclick="addTimer(5)">+5 MIN</button>
+            <button class="st-btn" onclick="addTimer(-5)">-5 MIN</button>
+            <span class="st-sep">|</span>
+            <button class="st-btn st-preset" onclick="setTimerDuration(15)">15m</button>
+            <button class="st-btn st-preset" onclick="setTimerDuration(20)">20m</button>
+            <button class="st-btn st-preset" onclick="setTimerDuration(30)">30m</button>
+            <button class="st-btn st-preset" onclick="setTimerDuration(45)">45m</button>
+            <button class="st-btn st-preset" onclick="setTimerDuration(60)">60m</button>
+        </div>
+
+        <!-- Ticker Announcement Bar on Stage Monitor -->
+        <div id="stage-ticker-bar">
+            <div id="stage-ticker-content"></div>
         </div>
 
         <!-- Flash Alert -->
@@ -2057,7 +2265,10 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
 
             // 2. Sermon Timer
             clientTimerRunning = !!state.sermonTimerRunning;
-            clientTimerSecs = state.sermonTimerRemainingSeconds !== undefined ? state.sermonTimerRemainingSeconds : 1800;
+            const sSecs = state.sermonTimerRemainingSeconds !== undefined ? state.sermonTimerRemainingSeconds : 1800;
+            if (Math.abs(clientTimerSecs - sSecs) > 1 || !clientTimerRunning) {
+                clientTimerSecs = sSecs;
+            }
             renderTimerUi();
 
             // 3. Stage Alert
@@ -2069,11 +2280,30 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             } else {
                 alertBanner.style.display = 'none';
             }
+
+            // 4. Ticker Announcement on Stage Monitor
+            const tickerBar = document.getElementById('stage-ticker-bar');
+            const tickerContent = document.getElementById('stage-ticker-content');
+            if (state.isTickerVisible && state.tickerText && state.tickerText.trim().length > 0) {
+                tickerContent.innerText = '📢 ' + state.tickerText;
+                if (state.tickerBackgroundColorRgb !== undefined) {
+                    const bgHex = '#' + ((state.tickerBackgroundColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.backgroundColor = bgHex;
+                }
+                if (state.tickerTextColorRgb !== undefined) {
+                    const textHex = '#' + ((state.tickerTextColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.color = textHex;
+                }
+                tickerBar.style.display = 'block';
+            } else {
+                tickerBar.style.display = 'none';
+            }
         }
 
         function renderTimerUi() {
             const timerEl = document.getElementById('sermon-timer');
             const badgeEl = document.getElementById('timer-status-badge');
+            const toggleBtn = document.getElementById('btn-timer-toggle');
             
             const isOvertime = clientTimerSecs < 0;
             const absSecs = Math.abs(clientTimerSecs);
@@ -2106,6 +2336,42 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             timerEl.className = colorClass;
             badgeEl.className = colorClass;
             badgeEl.innerText = badgeText;
+
+            if (toggleBtn) {
+                toggleBtn.innerText = clientTimerRunning ? '⏸️ JEDA TIMER' : '▶️ MULAI TIMER';
+                toggleBtn.style.backgroundColor = clientTimerRunning ? '#f59e0b' : '#10b981';
+            }
+        }
+
+        function sendTimerAction(action, params) {
+            const payload = Object.assign({ action: action }, params || {});
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(payload));
+            } else {
+                let url = '/api/timer?action=' + encodeURIComponent(action);
+                if (params) {
+                    for (let k in params) {
+                        url += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+                    }
+                }
+                fetch(url).then(r => r.json()).then(renderState).catch(() => {});
+            }
+        }
+
+        function toggleTimer() {
+            sendTimerAction('toggle_timer');
+        }
+
+        function resetTimer() {
+            sendTimerAction('reset_timer');
+        }
+
+        function addTimer(mins) {
+            sendTimerAction('add_timer_minutes', { minutes: mins });
+        }
+
+        function setTimerDuration(mins) {
+            sendTimerAction('set_timer_minutes', { minutes: mins });
         }
 
         // Local 1-second ticker for smooth timer if WS has slight delay
@@ -2204,12 +2470,43 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             white-space: pre-line;
             text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.7);
         }
+
+        #obs-ticker-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(204, 0, 0, 0.9);
+            color: #FFFFFF;
+            font-size: 28px;
+            font-weight: 800;
+            padding: 10px 0;
+            z-index: 100;
+            overflow: hidden;
+            white-space: nowrap;
+            display: none;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.7);
+        }
+
+        #obs-ticker-content {
+            display: inline-block;
+            padding-left: 100%;
+            animation: obsMarquee 20s linear infinite;
+        }
+
+        @keyframes obsMarquee {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-100%, 0); }
+        }
     </style>
 </head>
 <body>
     <div id="screen-root">
         <div id="text-container" class="text-overlay">
             <div id="text-box" class="text-box"></div>
+        </div>
+        <div id="obs-ticker-bar">
+            <div id="obs-ticker-content"></div>
         </div>
     </div>
     <script>
@@ -2218,23 +2515,44 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             const container = document.getElementById('text-container');
             if (state.status === 'BLACK' || state.status === 'CLEAR' || !state.text) {
                 box.style.display = 'none';
-                return;
+            } else {
+                box.style.display = 'block';
+                box.innerText = state.text;
+                box.style.fontSize = (state.fontSize || 32) + 'px';
+                box.style.color = state.textColor || '#FFFFFF';
+                box.style.fontWeight = state.isBold ? '800' : '500';
+                box.style.textAlign = state.textAlign || 'center';
+                box.style.backgroundColor = 'rgba(0, 0, 0, ' + (state.bgAlpha !== undefined ? state.bgAlpha : 0.4) + ')';
+                box.style.borderRadius = (state.textBoxCornerRadiusDp || 12) + 'px';
+                box.style.padding = (state.textBoxPaddingDp || 16) + 'px';
+                box.style.width = (state.textBoxWidthPercent || 90) + '%';
+                
+                container.style.top = (state.textVerticalPercent || 50) + '%';
+                container.style.left = (state.textHorizontalPercent || 50) + '%';
+                container.style.transform = 'translate(-' + (state.textHorizontalPercent || 50) + '%, -' + (state.textVerticalPercent || 50) + '%)';
+                container.style.width = '100%';
             }
-            box.style.display = 'block';
-            box.innerText = state.text;
-            box.style.fontSize = (state.fontSize || 32) + 'px';
-            box.style.color = state.textColor || '#FFFFFF';
-            box.style.fontWeight = state.isBold ? '800' : '500';
-            box.style.textAlign = state.textAlign || 'center';
-            box.style.backgroundColor = 'rgba(0, 0, 0, ' + (state.bgAlpha !== undefined ? state.bgAlpha : 0.4) + ')';
-            box.style.borderRadius = (state.textBoxCornerRadiusDp || 12) + 'px';
-            box.style.padding = (state.textBoxPaddingDp || 16) + 'px';
-            box.style.width = (state.textBoxWidthPercent || 90) + '%';
-            
-            container.style.top = (state.textVerticalPercent || 50) + '%';
-            container.style.left = (state.textHorizontalPercent || 50) + '%';
-            container.style.transform = 'translate(-' + (state.textHorizontalPercent || 50) + '%, -' + (state.textVerticalPercent || 50) + '%)';
-            container.style.width = '100%';
+
+            // OBS Ticker
+            const tickerBar = document.getElementById('obs-ticker-bar');
+            const tickerContent = document.getElementById('obs-ticker-content');
+            if (state.isTickerVisible && state.tickerText && state.tickerText.trim() !== '') {
+                tickerContent.innerText = state.tickerText;
+                if (state.tickerBackgroundColorRgb !== undefined) {
+                    const bgHex = '#' + ((state.tickerBackgroundColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.backgroundColor = bgHex;
+                }
+                if (state.tickerTextColorRgb !== undefined) {
+                    const textHex = '#' + ((state.tickerTextColorRgb >>> 0) & 0xFFFFFF).toString(16).padStart(6, '0');
+                    tickerBar.style.color = textHex;
+                }
+                const speed = state.tickerSpeed || 100;
+                const duration = Math.max(8, Math.min(60, (state.tickerText.length * 15) / (speed || 100)));
+                tickerContent.style.animationDuration = duration + 's';
+                tickerBar.style.display = 'block';
+            } else {
+                tickerBar.style.display = 'none';
+            }
         }
 
         function connectWebSocket() {

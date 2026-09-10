@@ -15,8 +15,15 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
     private val _state = MutableStateFlow(PresentationState())
     override val state: StateFlow<PresentationState> = _state.asStateFlow()
     val webServer = com.example.server.PresentationWebServer(this)
-    private val serverScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var serverScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var timerJob: Job? = null
+
+    private fun ensureServerScope(): CoroutineScope {
+        if (!serverScope.isActive) {
+            serverScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+        }
+        return serverScope
+    }
 
     // Shared in-memory library for Web Remote & Android App
     val songsLibrary = mutableListOf(
@@ -223,16 +230,28 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         _state.update {
             if (uri.isNullOrEmpty()) {
                 it.copy(backgroundType = BackgroundType.NONE, backgroundVideoUri = null)
-            } else if (uri.startsWith("http://") || uri.startsWith("https://")) {
-                it.copy(backgroundType = BackgroundType.IP_CAMERA, backgroundVideoUri = uri)
             } else {
-                it.copy(backgroundType = BackgroundType.VIDEO, backgroundVideoUri = uri)
+                val clean = uri.trim()
+                val isNetworkStream = clean.startsWith("http://") || clean.startsWith("https://") || clean.contains(":4747") || clean.contains("/video") || clean.contains("/mjpegfeed")
+                val isMediaFile = clean.lowercase().endsWith(".mp4") || clean.lowercase().endsWith(".m3u8") || clean.lowercase().endsWith(".webm") || clean.lowercase().endsWith(".mkv")
+                if (isNetworkStream && !isMediaFile) {
+                    val formatted = if (!clean.startsWith("http://") && !clean.startsWith("https://")) "http://$clean" else clean
+                    it.copy(backgroundType = BackgroundType.IP_CAMERA, backgroundVideoUri = formatted)
+                } else {
+                    it.copy(backgroundType = BackgroundType.VIDEO, backgroundVideoUri = clean)
+                }
             }
         }
     }
 
     fun setBackgroundIpCamera(streamUrl: String?) {
-        setBackgroundVideo(streamUrl)
+        if (streamUrl.isNullOrBlank()) {
+            _state.update { it.copy(backgroundType = BackgroundType.NONE, backgroundVideoUri = null) }
+        } else {
+            val clean = streamUrl.trim()
+            val formatted = if (!clean.startsWith("http://") && !clean.startsWith("https://")) "http://$clean" else clean
+            _state.update { it.copy(backgroundType = BackgroundType.IP_CAMERA, backgroundVideoUri = formatted) }
+        }
     }
 
     fun setBackgroundCamera(enabled: Boolean) {
@@ -417,8 +436,10 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
     }
 
     fun startSermonTimer() {
-        if (_state.value.sermonTimerRunning) return
-        _state.update { it.copy(sermonTimerRunning = true) }
+        _state.update {
+            val mode = if (it.sermonTimerMode == TimerMode.CLOCK_ONLY) TimerMode.COUNTDOWN else it.sermonTimerMode
+            it.copy(sermonTimerRunning = true, sermonTimerMode = mode)
+        }
         startTimerTicker()
     }
 
@@ -473,6 +494,9 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
 
     fun setStageTimerMode(mode: TimerMode) {
         _state.update { it.copy(sermonTimerMode = mode) }
+        if (mode != TimerMode.CLOCK_ONLY && _state.value.sermonTimerRunning) {
+            startTimerTicker()
+        }
     }
 
     fun sendStageAlert(message: String) {
@@ -490,34 +514,37 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
 
     private fun startTimerTicker() {
         timerJob?.cancel()
-        timerJob = serverScope.launch {
-            while (isActive) {
-                delay(1000)
-                _state.update { current ->
-                    if (!current.sermonTimerRunning) {
-                        current
-                    } else {
-                        when (current.sermonTimerMode) {
-                            TimerMode.COUNTDOWN -> current.copy(
-                                sermonTimerRemainingSeconds = current.sermonTimerRemainingSeconds - 1
-                            )
-                            TimerMode.COUNT_UP -> current.copy(
-                                sermonTimerRemainingSeconds = current.sermonTimerRemainingSeconds + 1
-                            )
-                            TimerMode.CLOCK_ONLY -> current
+        timerJob = ensureServerScope().launch {
+            try {
+                while (isActive) {
+                    delay(1000)
+                    _state.update { current ->
+                        if (!current.sermonTimerRunning) {
+                            current
+                        } else {
+                            val nextSecs = when (current.sermonTimerMode) {
+                                TimerMode.COUNTDOWN -> current.sermonTimerRemainingSeconds - 1
+                                TimerMode.COUNT_UP -> current.sermonTimerRemainingSeconds + 1
+                                TimerMode.CLOCK_ONLY -> current.sermonTimerRemainingSeconds
+                            }
+                            current.copy(sermonTimerRemainingSeconds = nextSecs)
                         }
                     }
                 }
+            } catch (_: CancellationException) {
+                // Expected when paused or reset
+            } catch (e: Throwable) {
+                android.util.Log.e("PresentationServer", "Timer ticker error", e)
             }
         }
     }
 
-    fun showTicker(text: String) {
-        _state.update { it.copy(tickerText = text, isTickerVisible = true) }
+    fun showTicker(text: String, speed: Int = 100) {
+        _state.update { it.copy(tickerText = text, isTickerVisible = true, tickerSpeed = speed) }
     }
 
     fun hideTicker() {
-        _state.update { it.copy(tickerText = null, isTickerVisible = false) }
+        _state.update { it.copy(isTickerVisible = false) }
     }
 
     fun buildLibraryJson(): JSONObject {

@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -127,13 +128,13 @@ fun PresentationFrameRenderer(
         }
 
         // Ticker Overlay
-        if (state.isTickerVisible && !state.tickerText.isNullOrBlank() && profileType != DisplayProfileType.STAGE_MONITOR) {
+        if (state.isTickerVisible && !state.tickerText.isNullOrBlank()) {
             TickerBar(
                 text = state.tickerText,
-                backgroundColorRgb = state.tickerBackgroundColorRgb,
-                textColorRgb = state.tickerTextColorRgb,
+                backgroundColorRgb = state.tickerBackgroundColorRgb.toInt(),
+                textColorRgb = state.tickerTextColorRgb.toInt(),
                 speed = state.tickerSpeed,
-                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 24.dp)
             )
         }
     }
@@ -143,8 +144,8 @@ fun PresentationFrameRenderer(
 @Composable
 fun TickerBar(
     text: String,
-    backgroundColorRgb: Long,
-    textColorRgb: Long,
+    backgroundColorRgb: Int,
+    textColorRgb: Int,
     speed: Int,
     modifier: Modifier = Modifier
 ) {
@@ -288,7 +289,7 @@ private fun SinglePresentationContent(
             }
 
             val liveTextStyle = androidx.compose.ui.text.TextStyle(
-                color = Color(state.textColorRgb),
+                color = Color(state.textColorRgb.toInt()),
                 fontSize = state.fontSizeSp.sp,
                 fontWeight = if (state.isTextBold) FontWeight.Bold else FontWeight.Normal,
                 fontFamily = state.stylePreset.fontFamily,
@@ -690,18 +691,58 @@ fun StageMonitorRenderer(
                 }
             }
         }
+
+        // Ticker / Announcement Banner on Stage Monitor
+        if (state.isTickerVisible && !state.tickerText.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            TickerBar(
+                text = state.tickerText,
+                backgroundColorRgb = state.tickerBackgroundColorRgb.toInt(),
+                textColorRgb = state.tickerTextColorRgb.toInt(),
+                speed = state.tickerSpeed,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+            )
+        }
     }
 }
 
 @Composable
-fun HeadlessCameraRenderer() {
+fun HeadlessCameraRenderer(modifier: Modifier = Modifier) {
     val latestBitmap by com.example.features.camera.CameraStreamManager.latestImageBitmap.collectAsState()
-    latestBitmap?.let { bmp ->
-        androidx.compose.foundation.Image(
-            bitmap = bmp,
-            contentDescription = "Live Camera",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-    } ?: Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+    val cameraMsg by com.example.features.camera.CameraStreamManager.cameraStateMessage.collectAsState()
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black),
+        contentAlignment = Alignment.Center
+    ) {
+        latestBitmap?.let { bmp ->
+            androidx.compose.foundation.Image(
+                bitmap = bmp,
+                contentDescription = "Live Camera",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } ?: Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = Color(0xFFD0BCFF),
+                modifier = Modifier.size(28.dp),
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = cameraMsg ?: "Menghubungkan Kamera...",
+                color = Color.LightGray,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
 }

@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.db.PresentationRepository
 import com.example.model.BibleContent
 import com.example.model.PresentationContent
 import com.example.api.BibleApiService
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BibleManagementScreen(
+    repository: PresentationRepository,
     onSelectForPreview: (PresentationContent) -> Unit,
     onSelectForGo: (PresentationContent) -> Unit,
     onAddToPlaylist: ((PresentationContent) -> Unit)? = null
@@ -42,31 +45,12 @@ fun BibleManagementScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    var passages by remember {
-        mutableStateOf(
-            listOf(
-                BibleContent(
-                    id = "b1",
-                    title = "Yohanes 3:16-17 (TB)",
-                    bookAndChapter = "Yohanes 3",
-                    verses = listOf(
-                        "16 Karena begitu besar kasih Allah akan dunia ini, sehingga Ia telah mengaruniakan Anak-Nya yang tunggal, supaya setiap orang yang percaya kepada-Nya tidak binasa, melainkan beroleh hidup yang kekal.",
-                        "17 Sebab Allah mengutus Anak-Nya ke dalam dunia bukan untuk menghakimi dunia, melainkan untuk menyelamatkannya oleh Dia."
-                    )
-                ),
-                BibleContent(
-                    id = "b2",
-                    title = "John 3:16 (KJV)",
-                    bookAndChapter = "John 3",
-                    verses = listOf(
-                        "16 For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."
-                    )
-                )
-            )
-        )
-    }
+    val passages by repository.allBibleVerses.collectAsStateWithLifecycle(initialValue = emptyList())
 
-    var selectedPassage by remember { mutableStateOf<BibleContent?>(passages.firstOrNull()) }
+    var selectedPassage by remember { mutableStateOf<BibleContent?>(null) }
+    var showAddManualDialog by remember { mutableStateOf(false) }
+    var passageToDelete by remember { mutableStateOf<BibleContent?>(null) }
+
 
     val filteredPassages = passages.filter {
         it.title.contains(searchQuery, ignoreCase = true) ||
@@ -169,7 +153,7 @@ fun BibleManagementScreen(
                                                     bookAndChapter = "${data.book?.name ?: inputBook} ${data.book?.chapter ?: inputChapter}",
                                                     verses = mappedVerses
                                                 )
-                                                passages = listOf(newContent) + passages
+                                                repository.insertBibleVerse(newContent)
                                                 selectedPassage = newContent
                                                 searchQuery = "" // Reset search
                                             } else {
@@ -188,7 +172,7 @@ fun BibleManagementScreen(
                                                     bookAndChapter = ref,
                                                     verses = mappedVerses
                                                 )
-                                                passages = listOf(newContent) + passages
+                                                repository.insertBibleVerse(newContent)
                                                 selectedPassage = newContent
                                                 searchQuery = ""
                                             } else {
@@ -251,12 +235,26 @@ fun BibleManagementScreen(
                     .fillMaxHeight()
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "📖 Daftar Ayat Disimpan",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📖 Daftar Ayat Disimpan",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                        Button(
+                            onClick = { showAddManualDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("+ Manual", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -341,6 +339,12 @@ fun BibleManagementScreen(
                                         Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                     }
                                 }
+                                OutlinedButton(
+                                    onClick = { passageToDelete = passage },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                                ) {
+                                    Text("Hapus", color = Color(0xFFEF4444), fontSize = 12.sp)
+                                }
                                 Button(
                                     onClick = { onSelectForPreview(passage) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
@@ -389,5 +393,111 @@ fun BibleManagementScreen(
                 }
             }
         }
+    }
+
+    // Delete Passage Confirmation Dialog
+    if (passageToDelete != null) {
+        val passage = passageToDelete!!
+        AlertDialog(
+            onDismissRequest = { passageToDelete = null },
+            title = { Text("Hapus Ayat Alkitab", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("Apakah Anda yakin ingin menghapus pasal/ayat \"${passage.title}\" dari database offline?", color = Color(0xFFD4D4D8)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            repository.deleteBibleVerse(passage.id)
+                            if (selectedPassage?.id == passage.id) {
+                                selectedPassage = null
+                            }
+                            passageToDelete = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("Hapus Permanen", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { passageToDelete = null }) {
+                    Text("Batal", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF2B2930)
+        )
+    }
+
+    // Manual Add Verse Dialog (Offline Mode)
+    if (showAddManualDialog) {
+        var manualTitle by remember { mutableStateOf("") }
+        var manualVersesText by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddManualDialog = false },
+            title = { Text("Tambah Ayat Manual (Offline)", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Masukkan ayat Alkitab secara mandiri tanpa memerlukan koneksi internet. Tersimpan permanen.",
+                        color = Color.LightGray,
+                        fontSize = 12.sp
+                    )
+                    OutlinedTextField(
+                        value = manualTitle,
+                        onValueChange = { manualTitle = it },
+                        label = { Text("Judul / Referensi (cth: Mazmur 23:1-6)", color = Color.Gray) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                    OutlinedTextField(
+                        value = manualVersesText,
+                        onValueChange = { manualVersesText = it },
+                        label = { Text("Isi Ayat (Pisahkan dengan baris baru untuk tiap ayat)", color = Color.Gray) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (manualTitle.isNotBlank() && manualVersesText.isNotBlank()) {
+                            val verseLines = manualVersesText.lines()
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                            val newPassage = BibleContent(
+                                id = "manual_${System.currentTimeMillis()}",
+                                title = manualTitle.trim(),
+                                bookAndChapter = manualTitle.trim(),
+                                verses = verseLines
+                            )
+                            coroutineScope.launch {
+                                repository.insertBibleVerse(newPassage)
+                                selectedPassage = newPassage
+                                showAddManualDialog = false
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                ) {
+                    Text("Simpan ke Database", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddManualDialog = false }) {
+                    Text("Batal", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF2B2930)
+        )
     }
 }

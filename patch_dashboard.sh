@@ -1,0 +1,3 @@
+sed -i 's|import androidx.compose.ui.platform.LocalContext|import androidx.compose.ui.platform.LocalContext\nimport com.example.db.AppDatabase\nimport com.example.db.PresentationRepository\nimport androidx.lifecycle.compose.collectAsStateWithLifecycle|g' app/src/main/java/com/example/features/dashboard/DashboardScreen.kt
+
+sed -i 's/fun DashboardScreen(server: PresentationServer) {/fun DashboardScreen(server: PresentationServer) {\n    val context = LocalContext.current\n    val database = remember { AppDatabase.getDatabase(context) }\n    val repository = remember { PresentationRepository(database) }/g' app/src/main/java/com/example/features/dashboard/DashboardScreen.kt

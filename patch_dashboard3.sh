@@ -1,0 +1,1 @@
+sed -i '/onAddSong = { newSong ->/,/                    },/c\                    onAddSong = { newSong ->\n                        androidx.compose.runtime.rememberCoroutineScope().launch {\n                            repository.insertLyric(newSong)\n                        }\n                    },' app/src/main/java/com/example/features/dashboard/DashboardScreen.kt
