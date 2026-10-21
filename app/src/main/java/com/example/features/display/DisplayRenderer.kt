@@ -26,13 +26,13 @@ class DisplayRenderer(
     private val displayListener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) {
             Log.d("DisplayRenderer", "Display Connected: $displayId")
-            onDisplayChangeListener?.invoke()
             // Auto-recovery attempt for newly attached presentation display
             val display = displayManager.getDisplay(displayId)
             if (display != null && displayId != Display.DEFAULT_DISPLAY) {
                 val profile = displayProfiles[displayId] ?: DisplayProfileType.MAIN_PROJECTOR
                 connectDisplay(display, profile)
             }
+            onDisplayChangeListener?.invoke()
         }
 
         override fun onDisplayRemoved(displayId: Int) {
@@ -49,8 +49,19 @@ class DisplayRenderer(
     init {
         try {
             displayManager.registerDisplayListener(displayListener, null)
+            autoConnectAvailableDisplays()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    fun autoConnectAvailableDisplays() {
+        val externalDisplays = detectDisplays()
+        for (disp in externalDisplays) {
+            if (!isDisplayConnected(disp.displayId)) {
+                val profile = displayProfiles[disp.displayId] ?: DisplayProfileType.MAIN_PROJECTOR
+                connectDisplay(disp, profile)
+            }
         }
     }
 

@@ -49,3 +49,30 @@ data class BibleEntity(
         )
     }
 }
+
+@Entity(tableName = "playlists")
+data class PlaylistEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val itemsJson: String,
+    val orderIndex: Int = 0
+) {
+    fun toModel(): com.example.model.ServicePlaylist {
+        val list = androidx.compose.runtime.mutableStateListOf<com.example.model.PresentationContent>()
+        list.addAll(Converters.deserializeContentList(itemsJson))
+        return com.example.model.ServicePlaylist(
+            id = id,
+            name = name,
+            items = list
+        )
+    }
+
+    companion object {
+        fun fromModel(model: com.example.model.ServicePlaylist, orderIndex: Int = 0) = PlaylistEntity(
+            id = model.id,
+            name = model.name,
+            itemsJson = Converters.serializeContentList(model.items.toList()),
+            orderIndex = orderIndex
+        )
+    }
+}

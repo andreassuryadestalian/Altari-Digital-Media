@@ -29,3 +29,15 @@ interface BibleDao {
     @Query("DELETE FROM bible_verses WHERE id = :id")
     suspend fun deleteBibleVerseById(id: String)
 }
+
+@Dao
+interface PlaylistDao {
+    @Query("SELECT * FROM playlists ORDER BY orderIndex ASC, name ASC")
+    fun getAllPlaylists(): Flow<List<PlaylistEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlaylist(playlist: PlaylistEntity)
+
+    @Query("DELETE FROM playlists WHERE id = :id")
+    suspend fun deletePlaylistById(id: String)
+}

@@ -38,26 +38,135 @@ fun PowerPointManagementScreen(
     var isConverting by remember { mutableStateOf(false) }
     var selectedPPT by remember { mutableStateOf<PowerPointContent?>(pptList.firstOrNull()) }
 
+    var showPptxWarningDialog by remember { mutableStateOf(false) }
+    var pendingFileUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingFileName by remember { mutableStateOf("") }
+
+    fun processConversion(fileUri: Uri, fileName: String) {
+        coroutineScope.launch {
+            isConverting = true
+            val conversionService = LocalPowerPointConversionService()
+            val slideImageUris = conversionService.convert(context, fileUri)
+
+            val newPPT = PowerPointContent(
+                id = System.currentTimeMillis().toString(),
+                title = fileName,
+                slides = slideImageUris
+            )
+            onAddPowerPoint(newPPT)
+            selectedPPT = newPPT
+            isConverting = false
+        }
+    }
+
     val pptPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { fileUri ->
-            coroutineScope.launch {
-                isConverting = true
-                val conversionService = LocalPowerPointConversionService()
-                val slideImageUris = conversionService.convert(context, fileUri)
-                val fileName = fileUri.lastPathSegment?.substringAfterLast('/') ?: "Presentation.pptx"
+            var resolvedName = "Presentation.pdf"
+            try {
+                val cursor = context.contentResolver.query(fileUri, null, null, null, null)
+                cursor?.use {
+                    if (it.moveToFirst()) {
+                        val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex != -1) {
+                            resolvedName = it.getString(nameIndex) ?: resolvedName
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
 
-                val newPPT = PowerPointContent(
-                    id = System.currentTimeMillis().toString(),
-                    title = fileName,
-                    slides = slideImageUris
-                )
-                onAddPowerPoint(newPPT)
-                selectedPPT = newPPT
-                isConverting = false
+            val lower = resolvedName.lowercase()
+            val isPowerPoint = lower.endsWith(".pptx") || lower.endsWith(".ppt") || lower.endsWith(".pps") || lower.endsWith(".ppsx")
+
+            if (isPowerPoint) {
+                pendingFileUri = fileUri
+                pendingFileName = resolvedName
+                showPptxWarningDialog = true
+            } else {
+                processConversion(fileUri, resolvedName)
             }
         }
+    }
+
+    // Warning Dialog for PPTX / PPT Files
+    if (showPptxWarningDialog && pendingFileUri != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showPptxWarningDialog = false
+                pendingFileUri = null
+            },
+            containerColor = Color(0xFF25232A),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("⚠️", fontSize = 20.sp)
+                    Text("Format PowerPoint (.PPTX / .PPT)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "File \"$pendingFileName\" berformat Microsoft PowerPoint.",
+                        color = Color(0xFFFDE047),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        text = "Perangkat Android tidak memiliki mesin bawaan untuk memproses animasi, tata letak, dan font asli PowerPoint secara langsung tanpa risiko distorsi atau salah format.",
+                        color = Color(0xFFD4D4D8),
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B4B)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("💡 REKOMENDASI TERBAIK:", color = Color(0xFFA5B4FC), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text(
+                                "Buka file Anda di PowerPoint atau Google Slides, lalu pilih 'File > Ekspor / Simpan Sebagai PDF' (Export as PDF). File PDF akan ditampilkan 100% presisi, tajam, dan tidak berantakan di proyektor.",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Apakah Anda ingin tetap mencoba memproses file ini dengan template dasar atau membatalkan untuk menyiapkan file PDF?",
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val uri = pendingFileUri
+                        val name = pendingFileName
+                        showPptxWarningDialog = false
+                        pendingFileUri = null
+                        if (uri != null) {
+                            processConversion(uri, name)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEAB308))
+                ) {
+                    Text("Lanjut Konversi Dasar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        showPptxWarningDialog = false
+                        pendingFileUri = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                ) {
+                    Text("Batal & Siapkan PDF", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+            }
+        )
     }
 
     Column(
@@ -79,9 +188,10 @@ fun PowerPointManagementScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Import PPT, PPTX, or PDF presentation slides",
-                    color = Color.Gray,
-                    fontSize = 12.sp
+                    text = "💡 Disarankan simpan PPT sebagai PDF untuk hasil 100% presisi",
+                    color = Color(0xFFFDE047),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
@@ -95,7 +205,7 @@ fun PowerPointManagementScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Converting...", color = Color(0xFF381E72))
                 } else {
-                    Text("+ Import PPT / PDF", color = Color(0xFF381E72), fontWeight = FontWeight.Bold)
+                    Text("+ Import PDF / PPT", color = Color(0xFF381E72), fontWeight = FontWeight.Bold)
                 }
             }
         }

@@ -30,4 +30,16 @@ class PresentationRepository(private val database: AppDatabase) {
     suspend fun deleteBibleVerse(id: String) {
         database.bibleDao().deleteBibleVerseById(id)
     }
+
+    val allPlaylists: Flow<List<com.example.model.ServicePlaylist>> = database.playlistDao().getAllPlaylists().map { list ->
+        list.map { it.toModel() }
+    }
+
+    suspend fun insertPlaylist(playlist: com.example.model.ServicePlaylist, orderIndex: Int = 0) {
+        database.playlistDao().insertPlaylist(PlaylistEntity.fromModel(playlist, orderIndex))
+    }
+
+    suspend fun deletePlaylist(id: String) {
+        database.playlistDao().deletePlaylistById(id)
+    }
 }

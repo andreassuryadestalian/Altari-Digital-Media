@@ -45,8 +45,26 @@ object CameraCaptureExecutor {
  * into [CameraStreamManager] for both local Compose rendering and MJPEG network streaming.
  */
 @Composable
-fun CameraCaptureHost() {
+fun CameraCaptureHost(enabled: Boolean = true) {
     val context = LocalContext.current
+
+    if (!enabled) {
+        LaunchedEffect(Unit) {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                } else {
+                    withContext(Dispatchers.IO) {
+                        cameraProviderFuture.get().unbindAll()
+                    }
+                }
+                CameraStreamManager.clearCurrentFrames()
+            } catch (_: Throwable) {}
+        }
+        return
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     val useFrontCamera by CameraStreamManager.useFrontCamera.collectAsState()
 
@@ -68,16 +86,29 @@ fun CameraCaptureHost() {
         }
     }
 
-    // Auto-prompt permission on first launch
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
+    // Auto-prompt permission ONLY when camera is actively enabled by the operator
+    LaunchedEffect(hasCameraPermission, enabled) {
+        if (enabled && !hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        onDispose {
+            try {
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+                CameraStreamManager.clearCurrentFrames()
+            } catch (_: Throwable) {}
         }
     }
 
     if (!hasCameraPermission) return
 
-    LaunchedEffect(useFrontCamera, hasCameraPermission) {
+    LaunchedEffect(useFrontCamera, hasCameraPermission, enabled) {
+        if (!enabled) return@LaunchedEffect
         try {
             val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
             val cameraProvider = withContext(Dispatchers.IO) {

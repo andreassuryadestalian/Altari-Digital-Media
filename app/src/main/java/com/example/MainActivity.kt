@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        presentationServer = PresentationServer(applicationContext)
+        presentationServer = PresentationServer(this)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         try {
-            presentationServer.webServer.stop()
+            presentationServer.destroy()
         } catch (_: Throwable) {}
     }
 }

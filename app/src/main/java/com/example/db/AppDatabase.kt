@@ -6,11 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [LyricEntity::class, BibleEntity::class], version = 1, exportSchema = false)
+@Database(entities = [LyricEntity::class, BibleEntity::class, PlaylistEntity::class], version = 2, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun lyricDao(): LyricDao
     abstract fun bibleDao(): BibleDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         @Volatile
@@ -22,7 +23,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "presentation_database"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

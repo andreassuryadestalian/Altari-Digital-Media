@@ -190,29 +190,49 @@ fun DashboardScreen(server: PresentationServer) {
         mutableStateListOf<PowerPointContent>()
     }
 
-    val playlists = remember {
-        mutableStateListOf<ServicePlaylist>(
-            ServicePlaylist(
-                id = "p1",
-                name = "Ibadah Minggu Pagi",
-                items = mutableStateListOf<PresentationContent>().apply {
-                    if (dbSongs.isNotEmpty()) add(dbSongs[0])
-                    if (dbSongs.size > 1) add(dbSongs[1])
-                }
-            ),
-            ServicePlaylist(
-                id = "p2",
-                name = "Ibadah Pemuda / Youth",
-                items = mutableStateListOf<PresentationContent>().apply {
-                    if (dbSongs.size > 2) add(dbSongs[2])
-                }
-            ),
-            ServicePlaylist(
-                id = "p3",
-                name = "Ibadah Minggu Sore",
-                items = mutableStateListOf()
+    val dbPlaylists by repository.allPlaylists.collectAsStateWithLifecycle(initialValue = emptyList())
+    val playlists = remember { mutableStateListOf<ServicePlaylist>() }
+
+    // Pre-populate default service playlists once into SQLite if empty
+    LaunchedEffect(dbPlaylists, dbSongs) {
+        val prefs = context.getSharedPreferences("prefs", android.content.Context.MODE_PRIVATE)
+        val hasPrepopulated = prefs.getBoolean("prepopulated_playlists_v2", false)
+        if (!hasPrepopulated && dbPlaylists.isEmpty()) {
+            val initialPlaylists = listOf(
+                ServicePlaylist(
+                    id = "p1",
+                    name = "Ibadah Minggu Pagi",
+                    items = mutableStateListOf<PresentationContent>().apply {
+                        if (dbSongs.isNotEmpty()) add(dbSongs[0])
+                        if (dbSongs.size > 1) add(dbSongs[1])
+                    }
+                ),
+                ServicePlaylist(
+                    id = "p2",
+                    name = "Ibadah Pemuda / Youth",
+                    items = mutableStateListOf<PresentationContent>().apply {
+                        if (dbSongs.size > 2) add(dbSongs[2])
+                    }
+                ),
+                ServicePlaylist(
+                    id = "p3",
+                    name = "Ibadah Minggu Sore",
+                    items = mutableStateListOf()
+                )
             )
-        )
+            initialPlaylists.forEachIndexed { idx, pl ->
+                repository.insertPlaylist(pl, idx)
+            }
+            prefs.edit().putBoolean("prepopulated_playlists_v2", true).apply()
+        }
+    }
+
+    // Synchronize playlists from Room Database into reactive UI list
+    LaunchedEffect(dbPlaylists) {
+        if (dbPlaylists.isNotEmpty()) {
+            playlists.clear()
+            playlists.addAll(dbPlaylists)
+        }
     }
 
     var activePlaylistId by remember { mutableStateOf("p1") }
@@ -252,8 +272,11 @@ fun DashboardScreen(server: PresentationServer) {
             .fillMaxSize()
             .background(BgMain)
     ) {
-        // Continuous background camera capture host for local UI rendering & network streaming
-        com.example.features.camera.CameraCaptureHost()
+        // On-demand camera capture host: only activates camera hardware when Camera or Split Screen is actively selected by operator
+        val isCameraActive = presentationState.backgroundType == BackgroundType.CAMERA ||
+                presentationState.currentContent is CameraContent ||
+                (presentationState.isSplitScreenEnabled && presentationState.splitCameraSourceType == BackgroundType.CAMERA)
+        com.example.features.camera.CameraCaptureHost(enabled = isCameraActive)
 
         TopBar(
             server = server,
@@ -344,25 +367,36 @@ fun DashboardScreen(server: PresentationServer) {
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onAddToPlaylist = { song ->
-                        activePlaylist?.items?.add(song)
+                        activePlaylist?.let { pl ->
+                            pl.items.add(song)
+                            coroutineScope.launch {
+                                repository.insertPlaylist(pl)
+                            }
+                        }
                     }
                 )
             }
             NavigationTab.BIBLE -> {
-                BibleManagementScreen(repository = repository,
-                    onSelectForPreview = {
-                        previewContent = it
-                        previewSlideIndex = 0
+                BibleManagementScreen(
+                    repository = repository,
+                    onSelectForPreview = { content, slideIdx ->
+                        previewContent = content
+                        previewSlideIndex = slideIdx
                         selectedTab = NavigationTab.DASHBOARD
                     },
-                    onSelectForGo = {
-                        previewContent = it
-                        previewSlideIndex = 0
-                        server.go(it)
+                    onSelectForGo = { content, slideIdx ->
+                        previewContent = content
+                        previewSlideIndex = slideIdx
+                        server.goSlide(content, slideIdx)
                         selectedTab = NavigationTab.DASHBOARD
                     },
                     onAddToPlaylist = { passage ->
-                        activePlaylist?.items?.add(passage)
+                        activePlaylist?.let { pl ->
+                            pl.items.add(passage)
+                            coroutineScope.launch {
+                                repository.insertPlaylist(pl)
+                            }
+                        }
                     }
                 )
             }
@@ -418,11 +452,20 @@ fun DashboardScreen(server: PresentationServer) {
                     onSelectActivePlaylist = { activePlaylistId = it },
                     onCreatePlaylist = { name ->
                         val newId = "p_${System.currentTimeMillis()}"
-                        playlists.add(ServicePlaylist(id = newId, name = name, items = mutableStateListOf()))
+                        val newPl = ServicePlaylist(id = newId, name = name, items = mutableStateListOf())
+                        playlists.add(newPl)
                         activePlaylistId = newId
+                        coroutineScope.launch {
+                            repository.insertPlaylist(newPl, playlists.size - 1)
+                        }
                     },
                     onRenamePlaylist = { id, newName ->
-                        playlists.find { it.id == id }?.name = newName
+                        playlists.find { it.id == id }?.let { pl ->
+                            pl.name = newName
+                            coroutineScope.launch {
+                                repository.insertPlaylist(pl)
+                            }
+                        }
                     },
                     onDeletePlaylist = { id ->
                         if (playlists.size > 1) {
@@ -430,18 +473,29 @@ fun DashboardScreen(server: PresentationServer) {
                             if (activePlaylistId == id) {
                                 activePlaylistId = playlists.first().id
                             }
+                            coroutineScope.launch {
+                                repository.deletePlaylist(id)
+                            }
                         }
                     },
                     onRemoveItem = { playlistId, index ->
-                        playlists.find { it.id == playlistId }?.items?.let { items ->
-                            if (index in items.indices) items.removeAt(index)
+                        playlists.find { it.id == playlistId }?.let { pl ->
+                            if (index in pl.items.indices) {
+                                pl.items.removeAt(index)
+                                coroutineScope.launch {
+                                    repository.insertPlaylist(pl)
+                                }
+                            }
                         }
                     },
                     onMoveItem = { playlistId, fromIdx, toIdx ->
-                        playlists.find { it.id == playlistId }?.items?.let { items ->
-                            if (fromIdx in items.indices && toIdx in items.indices) {
-                                val item = items.removeAt(fromIdx)
-                                items.add(toIdx, item)
+                        playlists.find { it.id == playlistId }?.let { pl ->
+                            if (fromIdx in pl.items.indices && toIdx in pl.items.indices) {
+                                val item = pl.items.removeAt(fromIdx)
+                                pl.items.add(toIdx, item)
+                                coroutineScope.launch {
+                                    repository.insertPlaylist(pl)
+                                }
                             }
                         }
                     },

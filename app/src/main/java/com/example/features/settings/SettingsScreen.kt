@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,6 +24,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.features.camera.CameraPreview
@@ -43,16 +46,24 @@ fun SettingsScreen(
     onClearBackground: () -> Unit
 ) {
     val context = LocalContext.current
-    val displayRenderer = remember { DisplayRenderer(context, server.state) }
+    val displayRenderer = server.displayRenderer ?: remember { DisplayRenderer(context, server.state) }
     var detectedDisplays by remember { mutableStateOf<List<Display>>(emptyList()) }
     var connectedDisplayProfiles by remember { mutableStateOf<Map<Int, DisplayProfileType>>(emptyMap()) }
 
     fun refreshDisplays() {
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
-        detectedDisplays = dm.displays.filter { it.displayId != Display.DEFAULT_DISPLAY }
+        val external = dm.displays.filter { it.displayId != Display.DEFAULT_DISPLAY }
+        detectedDisplays = external
+        val currentConnected = mutableMapOf<Int, DisplayProfileType>()
+        external.forEach { d ->
+            if (displayRenderer.isDisplayConnected(d.displayId)) {
+                currentConnected[d.displayId] = displayRenderer.getActiveProfile(d.displayId)
+            }
+        }
+        connectedDisplayProfiles = connectedDisplayProfiles + currentConnected
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(displayRenderer) {
         refreshDisplays()
         displayRenderer.setOnDisplayChangeListener {
             refreshDisplays()
@@ -1624,7 +1635,114 @@ fun LiveServerStatusCard(server: PresentationServer) {
                         fontSize = 11.sp,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
-                    
+
+                    // PIN Protection Configuration for Web Remote
+                    var isPinProtected by remember { mutableStateOf(!server.getRemotePin().isNullOrEmpty()) }
+                    var pinInput by remember { mutableStateOf(server.getRemotePin() ?: "") }
+
+                    Surface(
+                        color = Color(0xFF0F172A),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, if (isPinProtected) Color(0xFF06B6D4) else Color(0xFF334155)),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("🔒", fontSize = 14.sp)
+                                    Text(
+                                        text = "Kunci Web Remote dengan PIN (4 Digit)",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = isPinProtected,
+                                    onCheckedChange = { checked ->
+                                        isPinProtected = checked
+                                        if (!checked) {
+                                            server.setRemotePin(null)
+                                            pinInput = ""
+                                            Toast.makeText(context, "Proteksi PIN Web Remote dinonaktifkan", Toast.LENGTH_SHORT).show()
+                                        } else if (pinInput.length == 4) {
+                                            server.setRemotePin(pinInput)
+                                            Toast.makeText(context, "Proteksi PIN Web Remote aktif: $pinInput", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color(0xFF06B6D4),
+                                        checkedTrackColor = Color(0xFF0E7490)
+                                    )
+                                )
+                            }
+
+                            if (isPinProtected) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = pinInput,
+                                        onValueChange = { input ->
+                                            val filtered = input.filter { it.isDigit() }.take(4)
+                                            pinInput = filtered
+                                            if (filtered.length == 4) {
+                                                server.setRemotePin(filtered)
+                                            }
+                                        },
+                                        placeholder = { Text("PIN 4-Digit (cth: 1234)", fontSize = 12.sp, color = Color.Gray) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                        visualTransformation = PasswordVisualTransformation(),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color(0xFF06B6D4),
+                                            unfocusedBorderColor = Color(0xFF475569),
+                                            focusedTextColor = Color.White,
+                                            unfocusedTextColor = Color.White
+                                        )
+                                    )
+
+                                    Button(
+                                        onClick = {
+                                            if (pinInput.length == 4) {
+                                                server.setRemotePin(pinInput)
+                                                Toast.makeText(context, "PIN $pinInput berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "PIN harus tepat 4 angka!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF06B6D4)),
+                                        enabled = pinInput.length == 4
+                                    ) {
+                                        Text("Simpan", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Text(
+                                    text = if (server.getRemotePin() != null)
+                                        "🛡️ Status: Dilindungi PIN. Jemaat di WiFi gereja tidak bisa mengubah presentasi tanpa PIN."
+                                    else
+                                        "⚠️ Masukkan 4 angka PIN lalu tekan 'Simpan' untuk mengaktifkan proteksi.",
+                                    color = if (server.getRemotePin() != null) Color(0xFF34D399) else Color(0xFFFBBF24),
+                                    fontSize = 10.sp
+                                )
+                            } else {
+                                Text(
+                                    text = "Saat tidak dikunci, siapapun di jaringan Wi-Fi yang sama dapat mengakses Web Remote tanpa batasan.",
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

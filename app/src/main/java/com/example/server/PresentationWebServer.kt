@@ -27,6 +27,8 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
     @Volatile private var isRunning = false
     
     private val wsClients = ConcurrentHashMap<Socket, OutputStream>()
+    var remotePin: String? = null
+    private val authenticatedClients = java.util.Collections.synchronizedSet(mutableSetOf<Socket>())
     
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e("PresentationWebServer", "Caught coroutine exception in PresentationWebServer", throwable)
@@ -161,6 +163,9 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     val handshakeSuccess = handleWebSocketHandshake(clientKey, output)
                     if (handshakeSuccess) {
                         wsClients[socket] = output
+                        if (remotePin.isNullOrEmpty()) {
+                            authenticatedClients.add(socket)
+                        }
                         sendCurrentStateToClient(socket, output)
                         handleWebSocketFrames(socket, input)
                     }
@@ -266,6 +271,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             Log.d("PresentationWebServer", "Client handled: ${e.message}")
         } finally {
             wsClients.remove(socket)
+            authenticatedClients.remove(socket)
             try { socket.close() } catch (_: Throwable) {}
         }
     }
@@ -460,15 +466,56 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     try {
                         val textMsg = String(payload, Charsets.UTF_8)
                         val cmdJson = JSONObject(textMsg)
-                        executeRemoteCommand(cmdJson)
+                        executeRemoteCommand(socket, cmdJson)
                     } catch (_: Throwable) {}
                 }
             }
         } catch (_: Throwable) {}
     }
 
-    private fun executeRemoteCommand(cmdJson: JSONObject) {
+    private fun executeRemoteCommand(socket: Socket?, cmdJson: JSONObject) {
         val action = cmdJson.optString("action")
+
+        // Handle Web Remote PIN Authentication
+        if (action == "auth") {
+            val clientPin = cmdJson.optString("pin", "").trim()
+            val expectedPin = remotePin
+            val isSuccess = expectedPin.isNullOrEmpty() || (clientPin == expectedPin)
+            if (socket != null) {
+                if (isSuccess) {
+                    authenticatedClients.add(socket)
+                } else {
+                    authenticatedClients.remove(socket)
+                }
+                val out = wsClients[socket] ?: socket.getOutputStream()
+                val resp = JSONObject().apply {
+                    put("type", "auth_result")
+                    put("success", isSuccess)
+                    put("message", if (isSuccess) "PIN benar. Akses kontrol dibuka." else "PIN salah! Silakan coba lagi.")
+                }
+                sendWebSocketTextFrame(out, resp.toString())
+            }
+            return
+        }
+
+        // Verify PIN protection for remote operations
+        val clientCmdPin = cmdJson.optString("pin", "").trim()
+        val isAuthorized = remotePin.isNullOrEmpty() ||
+                (socket != null && authenticatedClients.contains(socket)) ||
+                (clientCmdPin == remotePin)
+
+        if (!isAuthorized) {
+            if (socket != null) {
+                val out = wsClients[socket] ?: socket.getOutputStream()
+                val resp = JSONObject().apply {
+                    put("type", "auth_error")
+                    put("message", "Akses ditolak: Web Remote terkunci dengan PIN 4-digit.")
+                }
+                sendWebSocketTextFrame(out, resp.toString())
+            }
+            return
+        }
+
         when (action) {
             "next" -> presentationServer.nextSlide()
             "prev" -> presentationServer.previousSlide()
@@ -1016,6 +1063,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
             json.put("mediaLibrary", mediaArray)
             json.put("backgroundImageUri", state.backgroundImageUri ?: "")
             json.put("backgroundVideoUri", state.backgroundVideoUri ?: "")
+            json.put("pinProtected", !remotePin.isNullOrEmpty())
 
             json.toString()
         } catch (e: Throwable) {
@@ -2571,6 +2619,7 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
     }
 
     private fun getRemoteControlHtml(): String {
+        val pinRequired = !remotePin.isNullOrEmpty()
         return """<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -3241,6 +3290,113 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         #toast.show {
             transform: translateX(-50%) translateY(0);
         }
+
+        /* PIN LOCK MODAL OVERLAY */
+        .pin-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(7, 10, 18, 0.96);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .pin-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 310px;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+        }
+
+        .pin-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #f8fafc;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .pin-subtitle {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 18px;
+            line-height: 1.4;
+        }
+
+        .pin-dots-container {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 10px;
+        }
+
+        .pin-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid #475569;
+            background: transparent;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .pin-dot.filled {
+            background: #06b6d4;
+            border-color: #06b6d4;
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.6);
+            transform: scale(1.15);
+        }
+
+        .pin-error {
+            color: #ef4444;
+            font-size: 11px;
+            font-weight: 600;
+            min-height: 18px;
+            margin-bottom: 14px;
+        }
+
+        .pin-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .pin-btn {
+            background: #1e293b;
+            border: 1px solid #334155;
+            color: #f8fafc;
+            font-size: 20px;
+            font-weight: 700;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .pin-btn:active {
+            background: #06b6d4;
+            color: #000;
+            transform: scale(0.95);
+        }
+
+        .pin-btn.action-btn {
+            font-size: 11px;
+            font-weight: 700;
+            color: #94a3b8;
+        }
     </style>
 </head>
 <body>
@@ -3251,9 +3407,12 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                 <h1>🎬 ALTARI DIGITAL</h1>
                 <p>Live Video Switcher & Multi-Cam Remote</p>
             </div>
-            <div id="status-badge" class="status-badge disconnected">
-                <div class="status-dot"></div>
-                <span id="status-text">OFFLINE</span>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button id="lock-btn" onclick="lockRemote()" style="display: none; background: #1e293b; border: 1px solid #334155; color: #94a3b8; border-radius: 6px; font-size: 10px; padding: 4px 8px; cursor: pointer; font-weight: 700;">🔒 Kunci</button>
+                <div id="status-badge" class="status-badge disconnected">
+                    <div class="status-dot"></div>
+                    <span id="status-text">OFFLINE</span>
+                </div>
             </div>
         </div>
 
@@ -3345,6 +3504,83 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         let currentState = null;
         let selectedPvwCamId = 'cam_local'; // Default selected preview camera
 
+        const isServerPinRequired = ${pinRequired};
+        let currentPinInput = '';
+        let activePin = localStorage.getItem('altari_remote_pin') || '';
+
+        function updatePinDots() {
+            for (let i = 0; i < 4; i++) {
+                const dot = document.getElementById('pdot-' + i);
+                if (dot) {
+                    if (i < currentPinInput.length) {
+                        dot.classList.add('filled');
+                    } else {
+                        dot.classList.remove('filled');
+                    }
+                }
+            }
+        }
+
+        function pressPin(num) {
+            if (currentPinInput.length < 4) {
+                currentPinInput += num;
+                updatePinDots();
+                const err = document.getElementById('pin-error-msg');
+                if (err) err.innerText = '';
+                if (currentPinInput.length === 4) {
+                    submitPin(currentPinInput);
+                }
+            }
+        }
+
+        function deletePin() {
+            if (currentPinInput.length > 0) {
+                currentPinInput = currentPinInput.slice(0, -1);
+                updatePinDots();
+                const err = document.getElementById('pin-error-msg');
+                if (err) err.innerText = '';
+            }
+        }
+
+        function clearPin() {
+            currentPinInput = '';
+            updatePinDots();
+            const err = document.getElementById('pin-error-msg');
+            if (err) err.innerText = '';
+        }
+
+        function submitPin(pin) {
+            sendCommand({ action: 'auth', pin: pin });
+        }
+
+        function lockRemote() {
+            localStorage.removeItem('altari_remote_pin');
+            activePin = '';
+            currentPinInput = '';
+            updatePinDots();
+            if (isServerPinRequired) {
+                const overlay = document.getElementById('pin-overlay');
+                if (overlay) overlay.style.display = 'flex';
+                showToast('Web Remote telah dikunci', '🔒');
+            }
+        }
+
+        function checkPinLock() {
+            const lockBtn = document.getElementById('lock-btn');
+            const overlay = document.getElementById('pin-overlay');
+            if (!isServerPinRequired) {
+                if (overlay) overlay.style.display = 'none';
+                if (lockBtn) lockBtn.style.display = 'none';
+                return;
+            }
+            if (lockBtn) lockBtn.style.display = 'inline-block';
+            if (activePin && activePin.length === 4) {
+                sendCommand({ action: 'auth', pin: activePin });
+            } else {
+                if (overlay) overlay.style.display = 'flex';
+            }
+        }
+
         function showToast(msg, icon = '✅') {
             const toast = document.getElementById('toast');
             document.getElementById('toast-icon').innerText = icon;
@@ -3354,6 +3590,9 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         }
 
         function sendCommand(cmd) {
+            if (activePin) {
+                cmd.pin = activePin;
+            }
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(cmd));
             } else {
@@ -3726,10 +3965,38 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
                     const badge = document.getElementById('status-badge');
                     badge.className = 'status-badge';
                     document.getElementById('status-text').innerText = 'TERHUBUNG';
+                    checkPinLock();
                 };
                 ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+                        if (data.type === 'auth_result') {
+                            if (data.success) {
+                                activePin = currentPinInput || activePin;
+                                localStorage.setItem('altari_remote_pin', activePin);
+                                const overlay = document.getElementById('pin-overlay');
+                                if (overlay) overlay.style.display = 'none';
+                                showToast(data.message || 'PIN Diterima! Akses dibuka.', '🔓');
+                            } else {
+                                const overlay = document.getElementById('pin-overlay');
+                                if (overlay) overlay.style.display = 'flex';
+                                const err = document.getElementById('pin-error-msg');
+                                if (err) err.innerText = data.message || 'PIN Salah. Silakan coba lagi.';
+                                currentPinInput = '';
+                                updatePinDots();
+                            }
+                            return;
+                        } else if (data.type === 'auth_error') {
+                            const overlay = document.getElementById('pin-overlay');
+                            if (overlay) overlay.style.display = 'flex';
+                            const err = document.getElementById('pin-error-msg');
+                            if (err) err.innerText = data.message || 'Akses ditolak: Masukkan PIN.';
+                            localStorage.removeItem('altari_remote_pin');
+                            activePin = '';
+                            currentPinInput = '';
+                            updatePinDots();
+                            return;
+                        }
                         updateUI(data);
                     } catch (e) {}
                 };
@@ -3751,6 +4018,39 @@ class PresentationWebServer(private val presentationServer: PresentationServer) 
         fetch('/api/state').then(r => r.json()).then(updateUI).catch(() => {});
         connectWebSocket();
     </script>
+
+    <!-- PIN LOCK OVERLAY -->
+    <div id="pin-overlay" class="pin-overlay" style="display: none;">
+        <div class="pin-card">
+            <div class="pin-title">
+                <span>🔒</span> Web Remote Terkunci
+            </div>
+            <div class="pin-subtitle">
+                Masukkan 4 digit PIN keamanan operator untuk mengendalikan presentasi.
+            </div>
+            <div class="pin-dots-container">
+                <div class="pin-dot" id="pdot-0"></div>
+                <div class="pin-dot" id="pdot-1"></div>
+                <div class="pin-dot" id="pdot-2"></div>
+                <div class="pin-dot" id="pdot-3"></div>
+            </div>
+            <div id="pin-error-msg" class="pin-error"></div>
+            <div class="pin-keypad">
+                <button type="button" class="pin-btn" onclick="pressPin('1')">1</button>
+                <button type="button" class="pin-btn" onclick="pressPin('2')">2</button>
+                <button type="button" class="pin-btn" onclick="pressPin('3')">3</button>
+                <button type="button" class="pin-btn" onclick="pressPin('4')">4</button>
+                <button type="button" class="pin-btn" onclick="pressPin('5')">5</button>
+                <button type="button" class="pin-btn" onclick="pressPin('6')">6</button>
+                <button type="button" class="pin-btn" onclick="pressPin('7')">7</button>
+                <button type="button" class="pin-btn" onclick="pressPin('8')">8</button>
+                <button type="button" class="pin-btn" onclick="pressPin('9')">9</button>
+                <button type="button" class="pin-btn action-btn" onclick="clearPin()">HAPUS</button>
+                <button type="button" class="pin-btn" onclick="pressPin('0')">0</button>
+                <button type="button" class="pin-btn action-btn" onclick="deletePin()">⌫</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>"""
     }

@@ -33,6 +33,12 @@ object CameraStreamManager {
         _cameraStateMessage.value = msg
     }
 
+    fun clearCurrentFrames() {
+        _latestFrame.value = null
+        _latestImageBitmap.value = null
+        _cameraStateMessage.value = null
+    }
+
     fun onNewFrame(bitmap: Bitmap, rotationDegrees: Int = 0) {
         val now = System.currentTimeMillis()
         // Throttle to ~30 fps (33ms) to ensure high performance and low latency

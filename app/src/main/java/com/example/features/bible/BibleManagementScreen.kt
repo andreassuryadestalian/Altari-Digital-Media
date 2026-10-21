@@ -28,8 +28,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun BibleManagementScreen(
     repository: PresentationRepository,
-    onSelectForPreview: (PresentationContent) -> Unit,
-    onSelectForGo: (PresentationContent) -> Unit,
+    onSelectForPreview: (PresentationContent, Int) -> Unit,
+    onSelectForGo: (PresentationContent, Int) -> Unit,
     onAddToPlaylist: ((PresentationContent) -> Unit)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -346,13 +346,13 @@ fun BibleManagementScreen(
                                     Text("Hapus", color = Color(0xFFEF4444), fontSize = 12.sp)
                                 }
                                 Button(
-                                    onClick = { onSelectForPreview(passage) },
+                                    onClick = { onSelectForPreview(passage, 0) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
                                 ) {
                                     Text("Preview", fontSize = 12.sp)
                                 }
                                 Button(
-                                    onClick = { onSelectForGo(passage) },
+                                    onClick = { onSelectForGo(passage, 0) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                                 ) {
                                     Text("GO LIVE", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -371,7 +371,7 @@ fun BibleManagementScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
-                                            onSelectForGo(passage)
+                                            onSelectForGo(passage, idx)
                                         }
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {

@@ -94,8 +94,39 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
         )
     )
 
+    var displayRenderer: com.example.features.display.DisplayRenderer? = null
+        private set
+
     init {
         webServer.start(context)
+        if (context != null) {
+            try {
+                val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                val savedPin = prefs.getString("web_remote_pin", "") ?: ""
+                webServer.remotePin = savedPin.ifEmpty { null }
+            } catch (e: Throwable) {
+                android.util.Log.e("PresentationServer", "Failed to load saved web remote PIN", e)
+            }
+            try {
+                displayRenderer = com.example.features.display.DisplayRenderer(context, _state.asStateFlow())
+            } catch (e: Throwable) {
+                android.util.Log.e("PresentationServer", "Failed to initialize DisplayRenderer", e)
+            }
+        }
+    }
+
+    fun destroy() {
+        try {
+            displayRenderer?.destroy()
+            displayRenderer = null
+        } catch (_: Throwable) {}
+        try {
+            webServer.stop()
+        } catch (_: Throwable) {}
+        try {
+            timerJob?.cancel()
+            serverScope.cancel()
+        } catch (_: Throwable) {}
     }
 
     fun goSlide(content: PresentationContent, slideIndex: Int = 0) {
@@ -608,5 +639,21 @@ class PresentationServer(val context: Context? = null) : PresentationEngine {
 
         return json
     }
+
+    fun setRemotePin(pin: String?) {
+        val cleanPin = pin?.trim()?.take(4)?.filter { it.isDigit() }
+        val finalPin = if (!cleanPin.isNullOrEmpty() && cleanPin.length == 4) cleanPin else null
+        webServer.remotePin = finalPin
+        if (context != null) {
+            try {
+                val prefs = context.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+                prefs.edit().putString("web_remote_pin", finalPin ?: "").apply()
+            } catch (e: Throwable) {
+                android.util.Log.e("PresentationServer", "Failed to save web remote PIN", e)
+            }
+        }
+    }
+
+    fun getRemotePin(): String? = webServer.remotePin
 }
 
