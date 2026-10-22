@@ -14,6 +14,9 @@ interface LyricDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLyric(lyric: LyricEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLyrics(lyrics: List<LyricEntity>)
+
     @Query("DELETE FROM lyrics WHERE id = :id")
     suspend fun deleteLyricById(id: String)
 }

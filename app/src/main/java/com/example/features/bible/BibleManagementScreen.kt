@@ -1,18 +1,22 @@
 package com.example.features.bible
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,6 +55,12 @@ fun BibleManagementScreen(
     var showAddManualDialog by remember { mutableStateOf(false) }
     var passageToDelete by remember { mutableStateOf<BibleContent?>(null) }
 
+    val isCompact = LocalConfiguration.current.screenWidthDp < 650
+    var compactViewMode by remember { mutableIntStateOf(0) } // 0: List, 1: Detail
+
+    if (isCompact && compactViewMode == 1) {
+        BackHandler { compactViewMode = 0 }
+    }
 
     val filteredPassages = passages.filter {
         it.title.contains(searchQuery, ignoreCase = true) ||
@@ -222,174 +232,83 @@ fun BibleManagementScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Left Column: Passage List
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF25232A)),
-                shape = RoundedCornerShape(12.dp),
+        if (isCompact) {
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .background(Color(0xFF25232A), RoundedCornerShape(8.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "📖 Daftar Ayat Disimpan",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Button(
-                            onClick = { showAddManualDialog = true },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(28.dp)
-                        ) {
-                            Text("+ Manual", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(filteredPassages) { passage ->
-                            val isSelected = passage.id == selectedPassage?.id
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedPassage = passage }
-                                    .background(
-                                        if (isSelected) Color(0xFF381E72) else Color(0xFF1C1B1F),
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) Color(0xFFD0BCFF) else Color.Transparent,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .padding(12.dp)
-                            ) {
-                                Column {
-                                    Text(
-                                        text = passage.title,
-                                        color = if (isSelected) Color(0xFFD0BCFF) else Color.White,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
-                                    )
-                                    Text(
-                                        text = passage.verses.firstOrNull() ?: "",
-                                        color = Color.Gray,
-                                        fontSize = 11.sp,
-                                        maxLines = 2
-                                    )
-                                }
-                            }
-                        }
-                    }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .background(if (compactViewMode == 0) Color(0xFF381E72) else Color.Transparent, RoundedCornerShape(6.dp))
+                        .clickable { compactViewMode = 0 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📖 Daftar (${filteredPassages.size})", color = if (compactViewMode == 0) Color(0xFFD0BCFF) else Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .background(if (compactViewMode == 1) Color(0xFF381E72) else Color.Transparent, RoundedCornerShape(6.dp))
+                        .clickable { compactViewMode = 1 },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("📜 Detail & Tayangkan", color = if (compactViewMode == 1) Color(0xFFD0BCFF) else Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            // Right Column: Verses Preview & Direct Trigger
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF25232A)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1.5f)
-                    .fillMaxHeight()
-            ) {
-                if (selectedPassage != null) {
-                    val passage = selectedPassage!!
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = passage.title,
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${passage.verses.size} Ayat",
-                                    color = Color.Gray,
-                                    fontSize = 12.sp
-                                )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                onAddToPlaylist?.let { addFn ->
-                                    Button(
-                                        onClick = { addFn(passage) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
-                                    ) {
-                                        Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    }
-                                }
-                                OutlinedButton(
-                                    onClick = { passageToDelete = passage },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
-                                ) {
-                                    Text("Hapus", color = Color(0xFFEF4444), fontSize = 12.sp)
-                                }
-                                Button(
-                                    onClick = { onSelectForPreview(passage, 0) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
-                                ) {
-                                    Text("Preview", fontSize = 12.sp)
-                                }
-                                Button(
-                                    onClick = { onSelectForGo(passage, 0) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                                ) {
-                                    Text("GO LIVE", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            itemsIndexed(passage.verses) { idx, verse ->
-                                Card(
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1B1F)),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            onSelectForGo(passage, idx)
-                                        }
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = verse,
-                                            color = Color.White,
-                                            fontSize = 14.sp,
-                                            lineHeight = 20.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (compactViewMode == 0) {
+                    PassageListContent(
+                        filteredPassages = filteredPassages,
+                        selectedPassage = selectedPassage,
+                        onSelectPassage = {
+                            selectedPassage = it
+                            compactViewMode = 1
+                        },
+                        onAddManual = { showAddManualDialog = true }
+                    )
                 } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Pilih atau cari ayat untuk melihat isi", color = Color.Gray)
-                    }
+                    PassageDetailContent(
+                        passage = selectedPassage,
+                        isCompact = true,
+                        onBack = { compactViewMode = 0 },
+                        onAddToPlaylist = onAddToPlaylist,
+                        onDeletePassage = { passageToDelete = it },
+                        onSelectForPreview = onSelectForPreview,
+                        onSelectForGo = onSelectForGo
+                    )
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    PassageListContent(
+                        filteredPassages = filteredPassages,
+                        selectedPassage = selectedPassage,
+                        onSelectPassage = { selectedPassage = it },
+                        onAddManual = { showAddManualDialog = true }
+                    )
+                }
+                Box(modifier = Modifier.weight(1.5f).fillMaxHeight()) {
+                    PassageDetailContent(
+                        passage = selectedPassage,
+                        isCompact = false,
+                        onBack = null,
+                        onAddToPlaylist = onAddToPlaylist,
+                        onDeletePassage = { passageToDelete = it },
+                        onSelectForPreview = onSelectForPreview,
+                        onSelectForGo = onSelectForGo
+                    )
                 }
             }
         }
@@ -499,5 +418,211 @@ fun BibleManagementScreen(
             },
             containerColor = Color(0xFF2B2930)
         )
+    }
+}
+
+@Composable
+private fun PassageListContent(
+    filteredPassages: List<BibleContent>,
+    selectedPassage: BibleContent?,
+    onSelectPassage: (BibleContent) -> Unit,
+    onAddManual: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF25232A)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "📖 Daftar Ayat Disimpan",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Button(
+                    onClick = onAddManual,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488)),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text("+ Manual", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (filteredPassages.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("Belum ada ayat disimpan", color = Color.Gray, fontSize = 12.sp)
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredPassages) { passage ->
+                        val isSelected = passage.id == selectedPassage?.id
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectPassage(passage) }
+                                .background(
+                                    if (isSelected) Color(0xFF381E72) else Color(0xFF1C1B1F),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isSelected) Color(0xFFD0BCFF) else Color.Transparent,
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .padding(12.dp)
+                        ) {
+                            Column {
+                                Text(
+                                    text = passage.title,
+                                    color = if (isSelected) Color(0xFFD0BCFF) else Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = passage.verses.firstOrNull() ?: "",
+                                    color = Color.Gray,
+                                    fontSize = 11.sp,
+                                    maxLines = 2
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PassageDetailContent(
+    passage: BibleContent?,
+    isCompact: Boolean,
+    onBack: (() -> Unit)?,
+    onAddToPlaylist: ((PresentationContent) -> Unit)?,
+    onDeletePassage: (BibleContent) -> Unit,
+    onSelectForPreview: (PresentationContent, Int) -> Unit,
+    onSelectForGo: (PresentationContent, Int) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF25232A)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        if (passage != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp)
+            ) {
+                if (isCompact && onBack != null) {
+                    TextButton(
+                        onClick = onBack,
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text("◀ Kembali ke Daftar Ayat", color = Color(0xFFD0BCFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = passage.title,
+                            color = Color.White,
+                            fontSize = if (isCompact) 16.sp else 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${passage.verses.size} Ayat",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    onAddToPlaylist?.let { addFn ->
+                        Button(
+                            onClick = { addFn(passage) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                        ) {
+                            Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { onDeletePassage(passage) },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                    ) {
+                        Text("Hapus", color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = { onSelectForPreview(passage, 0) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
+                    ) {
+                        Text("Preview", fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = { onSelectForGo(passage, 0) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Text("GO LIVE", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    itemsIndexed(passage.verses) { idx, verse ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1B1F)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelectForGo(passage, idx)
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = verse,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Pilih atau cari ayat untuk melihat isi", color = Color.Gray)
+            }
+        }
     }
 }

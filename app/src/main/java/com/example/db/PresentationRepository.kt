@@ -19,6 +19,10 @@ class PresentationRepository(private val database: AppDatabase) {
         database.lyricDao().insertLyric(LyricEntity.fromModel(lyric))
     }
 
+    suspend fun insertLyrics(lyrics: List<LyricsContent>) {
+        database.lyricDao().insertLyrics(lyrics.map { LyricEntity.fromModel(it) })
+    }
+
     suspend fun deleteLyric(id: String) {
         database.lyricDao().deleteLyricById(id)
     }

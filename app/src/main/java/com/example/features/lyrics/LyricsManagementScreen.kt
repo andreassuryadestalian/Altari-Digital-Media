@@ -1,20 +1,24 @@
 package com.example.features.lyrics
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -22,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.db.PresentationRepository
 import com.example.model.LyricsContent
+import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -37,14 +42,17 @@ fun LyricsManagementScreen(
     onAddToPlaylist: ((LyricsContent) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var searchQuery by remember { mutableStateOf("") }
     var showEditDialog by remember { mutableStateOf(false) }
     var editingSong by remember { mutableStateOf<LyricsContent?>(null) }
     var songToDelete by remember { mutableStateOf<LyricsContent?>(null) }
+    var showPresetSongbookDialog by remember { mutableStateOf(false) }
+    var showGeminiSearchDialog by remember { mutableStateOf(false) }
 
-    // TXT File Picker
-    val txtLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+    // Multi-format File Picker (.txt & .json)
+    val fileImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let {
             try {
@@ -53,16 +61,34 @@ fun LyricsManagementScreen(
                 val content = reader.readText()
                 inputStream?.close()
 
-                val fileName = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.') ?: "Imported Song"
-                val slides = LyricsParser.parse(content)
-                val newSong = LyricsContent(
-                    id = System.currentTimeMillis().toString(),
-                    title = fileName,
-                    slides = if (slides.isEmpty()) listOf(content) else slides
-                )
-                onAddSong(newSong)
+                val rawName = uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: "Lagu"
+                val isJson = rawName.endsWith(".json", ignoreCase = true) ||
+                        content.trimStart().startsWith("{") ||
+                        content.trimStart().startsWith("[")
+
+                val baseTitle = if (rawName.contains('.')) rawName.substringBeforeLast('.') else rawName
+                val importedSongs: List<LyricsContent> = if (isJson) {
+                    LyricsParser.parseJsonSongs(content, baseTitle)
+                } else {
+                    LyricsParser.parseMultiSongTxt(content, baseTitle)
+                }
+
+                if (importedSongs.isNotEmpty()) {
+                    coroutineScope.launch {
+                        repository.insertLyrics(importedSongs)
+                        val formatTag = if (isJson) "JSON" else "TXT"
+                        Toast.makeText(
+                            context,
+                            "✅ Berhasil mengimpor ${importedSongs.size} lagu ($formatTag)!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } else {
+                    Toast.makeText(context, "File kosong atau format tidak didukung", Toast.LENGTH_SHORT).show()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                Toast.makeText(context, "Gagal mengimpor file: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -74,51 +100,138 @@ fun LyricsManagementScreen(
 
     var showSmartPasteDialog by remember { mutableStateOf(false) }
 
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF1C1B1F))
             .padding(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "LYRICS LIBRARY",
-                color = Color(0xFFE6E1E9),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
+        if (isCompact) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "LYRICS LIBRARY",
+                    color = Color(0xFFE6E1E9),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { txtLauncher.launch("text/plain") },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Import TXT", color = Color(0xFFD0BCFF))
+                    Button(
+                        onClick = { showGeminiSearchDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Text("✨ Cari Lirik AI", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { showPresetSongbookDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                    ) {
+                        Text("📚 Preset Songbook", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            fileImportLauncher.launch(
+                                arrayOf("text/plain", "application/json", "application/octet-stream", "*/*")
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("📥 Import TXT / JSON", color = Color(0xFFD0BCFF))
+                    }
+
+                    Button(
+                        onClick = { showSmartPasteDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                    ) {
+                        Text("📝 Smart Paste", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            editingSong = LyricsContent(
+                                id = System.currentTimeMillis().toString(),
+                                title = "New Song",
+                                slides = listOf("Verse 1\nEnter lyrics here...")
+                            )
+                            showEditDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0BCFF))
+                    ) {
+                        Text("+ Add Song", color = Color(0xFF381E72), fontWeight = FontWeight.Bold)
+                    }
                 }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "LYRICS LIBRARY",
+                    color = Color(0xFFE6E1E9),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
-                Button(
-                    onClick = { showSmartPasteDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
-                ) {
-                    Text("📝 Smart Paste", color = Color.White, fontWeight = FontWeight.Bold)
-                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { showGeminiSearchDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Text("✨ Cari Lirik AI", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
 
-                Button(
-                    onClick = {
-                        editingSong = LyricsContent(
-                            id = System.currentTimeMillis().toString(),
-                            title = "New Song",
-                            slides = listOf("Verse 1\nEnter lyrics here...")
-                        )
-                        showEditDialog = true
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0BCFF))
-                ) {
-                    Text("+ Add Song", color = Color(0xFF381E72), fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = { showPresetSongbookDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                    ) {
+                        Text("📚 Preset Songbook", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            fileImportLauncher.launch(
+                                arrayOf("text/plain", "application/json", "application/octet-stream", "*/*")
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("📥 Import TXT / JSON", color = Color(0xFFD0BCFF))
+                    }
+
+                    Button(
+                        onClick = { showSmartPasteDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D9488))
+                    ) {
+                        Text("📝 Smart Paste", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            editingSong = LyricsContent(
+                                id = System.currentTimeMillis().toString(),
+                                title = "New Song",
+                                slides = listOf("Verse 1\nEnter lyrics here...")
+                            )
+                            showEditDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD0BCFF))
+                    ) {
+                        Text("+ Add Song", color = Color(0xFF381E72), fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -152,68 +265,156 @@ fun LyricsManagementScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = song.title,
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "${song.slides.size} Slides",
-                                color = Color.Gray,
-                                fontSize = 12.sp
-                            )
-                        }
+                    if (isCompact) {
+                        Column(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = song.title,
+                                        color = Color.White,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${song.slides.size} Slides",
+                                        color = Color.Gray,
+                                        fontSize = 11.sp
+                                    )
+                                }
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            onAddToPlaylist?.let { addFn ->
                                 Button(
-                                    onClick = { addFn(song) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                                    onClick = { onSelectForGo(song) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
                                 ) {
-                                    Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold)
+                                    Text("GO LIVE ▶", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                 }
                             }
 
-                            OutlinedButton(
-                                onClick = {
-                                    editingSong = song
-                                    showEditDialog = true
-                                },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD0BCFF))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Text("Edit")
-                            }
+                                onAddToPlaylist?.let { addFn ->
+                                    Button(
+                                        onClick = { addFn(song) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    }
+                                }
 
-                            onDeleteSong?.let { delFn ->
                                 OutlinedButton(
-                                    onClick = { songToDelete = song },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                                    onClick = {
+                                        editingSong = song
+                                        showEditDialog = true
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD0BCFF)),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(30.dp)
                                 ) {
-                                    Text("Hapus", color = Color(0xFFEF4444))
+                                    Text("Edit", fontSize = 11.sp)
+                                }
+
+                                onDeleteSong?.let { delFn ->
+                                    OutlinedButton(
+                                        onClick = { songToDelete = song },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Text("Hapus", color = Color(0xFFEF4444), fontSize = 11.sp)
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { onSelectForPreview(song) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Text("Preview", color = Color.White, fontSize = 11.sp)
                                 }
                             }
-
-                            Button(
-                                onClick = { onSelectForPreview(song) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
-                            ) {
-                                Text("Preview", color = Color.White)
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = song.title,
+                                    color = Color.White,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${song.slides.size} Slides",
+                                    color = Color.Gray,
+                                    fontSize = 12.sp
+                                )
                             }
 
-                            Button(
-                                onClick = { onSelectForGo(song) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                            ) {
-                                Text("GO LIVE", color = Color.White, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                onAddToPlaylist?.let { addFn ->
+                                    Button(
+                                        onClick = { addFn(song) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                                    ) {
+                                        Text("+ Playlist", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        editingSong = song
+                                        showEditDialog = true
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFD0BCFF))
+                                ) {
+                                    Text("Edit")
+                                }
+
+                                onDeleteSong?.let { delFn ->
+                                    OutlinedButton(
+                                        onClick = { songToDelete = song },
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+                                    ) {
+                                        Text("Hapus", color = Color(0xFFEF4444))
+                                    }
+                                }
+
+                                Button(
+                                    onClick = { onSelectForPreview(song) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F))
+                                ) {
+                                    Text("Preview", color = Color.White)
+                                }
+
+                                Button(
+                                    onClick = { onSelectForGo(song) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                                ) {
+                                    Text("GO LIVE", color = Color.White, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -372,7 +573,53 @@ fun LyricsManagementScreen(
                     Text("Batal", color = Color.Gray)
                 }
             },
-            containerColor = Color(0xFF2B2930)
+        )
+    }
+
+    // Preset Songbook Dialog
+    if (showPresetSongbookDialog) {
+        PresetSongbookDialog(
+            existingSongs = songsList,
+            onDismissRequest = { showPresetSongbookDialog = false },
+            onImportSingleSong = { song ->
+                coroutineScope.launch {
+                    repository.insertLyric(song)
+                }
+            },
+            onImportMultipleSongs = { songs ->
+                coroutineScope.launch {
+                    repository.insertLyrics(songs)
+                }
+            },
+            onSelectForPreview = { song ->
+                onSelectForPreview(song)
+                showPresetSongbookDialog = false
+            },
+            onSelectForGo = { song ->
+                onSelectForGo(song)
+                showPresetSongbookDialog = false
+            }
+        )
+    }
+
+    // Gemini AI Lyric Search Dialog
+    if (showGeminiSearchDialog) {
+        GeminiLyricSearchDialog(
+            existingSongs = songsList,
+            onDismissRequest = { showGeminiSearchDialog = false },
+            onSaveToLibrary = { song ->
+                coroutineScope.launch {
+                    repository.insertLyric(song)
+                }
+            },
+            onSelectForPreview = { song ->
+                onSelectForPreview(song)
+                showGeminiSearchDialog = false
+            },
+            onSelectForGo = { song ->
+                onSelectForGo(song)
+                showGeminiSearchDialog = false
+            }
         )
     }
 }

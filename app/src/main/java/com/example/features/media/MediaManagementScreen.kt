@@ -4,10 +4,12 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -221,52 +224,110 @@ fun MediaManagementScreen(
             .background(Color(0xFF1C1B1F))
             .padding(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "MEDIA & BACKGROUND ENGINE",
-                color = Color(0xFFE6E1E9),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
+        val isCompact = LocalConfiguration.current.screenWidthDp < 600
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { imageLauncher.launch("image/*") },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+        if (isCompact) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "MEDIA & BACKGROUND ENGINE",
+                    color = Color(0xFFE6E1E9),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("+ Image", color = Color(0xFFD0BCFF))
+                    Button(
+                        onClick = { imageLauncher.launch("image/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ Image", color = Color(0xFFD0BCFF))
+                    }
+
+                    Button(
+                        onClick = { videoLauncher.launch("video/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ Video", color = Color(0xFFD0BCFF))
+                    }
+
+                    Button(
+                        onClick = { showDroidCamDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ DroidCam", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            val cameraMedia = CameraContent(
+                                id = System.currentTimeMillis().toString(),
+                                title = "Kamera Lokal Feed",
+                                cameraId = "0"
+                            )
+                            onAddMedia(cameraMedia)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Text("+ Cam Lokal", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "MEDIA & BACKGROUND ENGINE",
+                    color = Color(0xFFE6E1E9),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
 
-                Button(
-                    onClick = { videoLauncher.launch("video/*") },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
-                ) {
-                    Text("+ Video", color = Color(0xFFD0BCFF))
-                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { imageLauncher.launch("image/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ Image", color = Color(0xFFD0BCFF))
+                    }
 
-                Button(
-                    onClick = { showDroidCamDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
-                ) {
-                    Text("+ DroidCam", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold)
-                }
+                    Button(
+                        onClick = { videoLauncher.launch("video/*") },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ Video", color = Color(0xFFD0BCFF))
+                    }
 
-                Button(
-                    onClick = {
-                        val cameraMedia = CameraContent(
-                            id = System.currentTimeMillis().toString(),
-                            title = "Kamera Lokal Feed",
-                            cameraId = "0"
-                        )
-                        onAddMedia(cameraMedia)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                ) {
-                    Text("+ Cam Lokal", color = Color.White, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = { showDroidCamDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF381E72))
+                    ) {
+                        Text("+ DroidCam", color = Color(0xFFD0BCFF), fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            val cameraMedia = CameraContent(
+                                id = System.currentTimeMillis().toString(),
+                                title = "Kamera Lokal Feed",
+                                cameraId = "0"
+                            )
+                            onAddMedia(cameraMedia)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                    ) {
+                        Text("+ Cam Lokal", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -309,7 +370,7 @@ fun MediaManagementScreen(
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+                columns = GridCells.Adaptive(minSize = 160.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()

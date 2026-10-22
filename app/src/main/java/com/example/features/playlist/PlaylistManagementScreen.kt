@@ -3,12 +3,15 @@ package com.example.features.playlist
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -132,6 +135,8 @@ fun PlaylistManagementScreen(
             }
         )
     }
+
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
 
     Column(
         modifier = Modifier
@@ -325,107 +330,219 @@ fun PlaylistManagementScreen(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(12.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                            if (isCompact) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .background(Color(0xFF381E72), RoundedCornerShape(6.dp)),
-                                        contentAlignment = Alignment.Center
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text(
-                                            text = if (index + 1 < 10) "0${index + 1}" else "${index + 1}",
-                                            color = Color(0xFFD0BCFF),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .background(Color(0xFF381E72), RoundedCornerShape(6.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = if (index + 1 < 10) "0${index + 1}" else "${index + 1}",
+                                                    color = Color(0xFFD0BCFF),
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(8.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    color = Color.White,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1
+                                                )
+                                                val typeLabel = when (item) {
+                                                    is LyricsContent -> "🎵 Song • Lyrics"
+                                                    is VideoContent -> "🎥 Media • Video"
+                                                    is ImageContent -> "🖼️ Media • Image"
+                                                    is BibleContent -> "📖 Scripture • Bible"
+                                                    is CameraContent -> "📷 Hardware Camera"
+                                                    is IpCameraContent -> "📱 DroidCam Stream"
+                                                    is PowerPointContent -> "📊 Presentation Slides"
+                                                }
+                                                Text(typeLabel, color = Color.Gray, fontSize = 10.sp)
+                                            }
+                                        }
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    if (index > 0) onMoveItem(activePlaylist.id, index, index - 1)
+                                                },
+                                                enabled = index > 0,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Text("⬆️", fontSize = 11.sp, color = if (index > 0) Color.White else Color.DarkGray)
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    if (index < playlistItems.size - 1) onMoveItem(activePlaylist.id, index, index + 1)
+                                                },
+                                                enabled = index < playlistItems.size - 1,
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Text("⬇️", fontSize = 11.sp, color = if (index < playlistItems.size - 1) Color.White else Color.DarkGray)
+                                            }
+
+                                            IconButton(
+                                                onClick = { onRemoveItem(activePlaylist.id, index) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Text("✕", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            }
+                                        }
                                     }
 
-                                    Spacer(modifier = Modifier.width(10.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = item.title,
-                                            color = Color.White,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        val typeLabel = when (item) {
-                                            is LyricsContent -> "🎵 Song • Lyrics"
-                                            is VideoContent -> "🎥 Media • Video"
-                                            is ImageContent -> "🖼️ Media • Image"
-                                            is BibleContent -> "📖 Scripture • Bible"
-                                            is CameraContent -> "📷 Hardware Camera"
-                                            is IpCameraContent -> "📱 DroidCam / IP Stream"
-                                            is PowerPointContent -> "📊 Presentation Slides"
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { onSelectForPreview(item) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("Preview", color = Color.White, fontSize = 11.sp)
                                         }
-                                        Text(typeLabel, color = Color.Gray, fontSize = 11.sp)
+
+                                        Button(
+                                            onClick = { onSelectForGo(item) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("GO LIVE ▶", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
                                     }
                                 }
-
+                            } else {
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    // Move Up / Down
-                                    IconButton(
-                                        onClick = {
-                                            if (index > 0) {
-                                                onMoveItem(activePlaylist.id, index, index - 1)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .background(Color(0xFF381E72), RoundedCornerShape(6.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = if (index + 1 < 10) "0${index + 1}" else "${index + 1}",
+                                                color = Color(0xFFD0BCFF),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.title,
+                                                color = Color.White,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            val typeLabel = when (item) {
+                                                is LyricsContent -> "🎵 Song • Lyrics"
+                                                is VideoContent -> "🎥 Media • Video"
+                                                is ImageContent -> "🖼️ Media • Image"
+                                                is BibleContent -> "📖 Scripture • Bible"
+                                                is CameraContent -> "📷 Hardware Camera"
+                                                is IpCameraContent -> "📱 DroidCam / IP Stream"
+                                                is PowerPointContent -> "📊 Presentation Slides"
                                             }
-                                        },
-                                        enabled = index > 0,
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Text("⬆️", fontSize = 12.sp, color = if (index > 0) Color.White else Color.DarkGray)
+                                            Text(typeLabel, color = Color.Gray, fontSize = 11.sp)
+                                        }
                                     }
 
-                                    IconButton(
-                                        onClick = {
-                                            if (index < playlistItems.size - 1) {
-                                                onMoveItem(activePlaylist.id, index, index + 1)
-                                            }
-                                        },
-                                        enabled = index < playlistItems.size - 1,
-                                        modifier = Modifier.size(32.dp)
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("⬇️", fontSize = 12.sp, color = if (index < playlistItems.size - 1) Color.White else Color.DarkGray)
-                                    }
+                                        // Move Up / Down
+                                        IconButton(
+                                            onClick = {
+                                                if (index > 0) {
+                                                    onMoveItem(activePlaylist.id, index, index - 1)
+                                                }
+                                            },
+                                            enabled = index > 0,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Text("⬆️", fontSize = 12.sp, color = if (index > 0) Color.White else Color.DarkGray)
+                                        }
 
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                        IconButton(
+                                            onClick = {
+                                                if (index < playlistItems.size - 1) {
+                                                    onMoveItem(activePlaylist.id, index, index + 1)
+                                                }
+                                            },
+                                            enabled = index < playlistItems.size - 1,
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Text("⬇️", fontSize = 12.sp, color = if (index < playlistItems.size - 1) Color.White else Color.DarkGray)
+                                        }
 
-                                    Button(
-                                        onClick = { onSelectForPreview(item) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
-                                        shape = RoundedCornerShape(6.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text("Preview", color = Color.White, fontSize = 11.sp)
-                                    }
+                                        Spacer(modifier = Modifier.width(4.dp))
 
-                                    Button(
-                                        onClick = { onSelectForGo(item) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                                        shape = RoundedCornerShape(6.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text("GO LIVE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                    }
+                                        Button(
+                                            onClick = { onSelectForPreview(item) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF49454F)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("Preview", color = Color.White, fontSize = 11.sp)
+                                        }
 
-                                    IconButton(
-                                        onClick = { onRemoveItem(activePlaylist.id, index) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Text("✕", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Button(
+                                            onClick = { onSelectForGo(item) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("GO LIVE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
+
+                                        IconButton(
+                                            onClick = { onRemoveItem(activePlaylist.id, index) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Text("✕", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        }
                                     }
                                 }
                             }

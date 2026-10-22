@@ -8,7 +8,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -560,203 +563,385 @@ fun TopBar(
         )
     }
 
+    val isCompactScreen = LocalConfiguration.current.screenWidthDp < 640
+
+    val timerSecs = presentationState.sermonTimerRemainingSeconds
+    val isTimerOvertime = timerSecs < 0
+    val absSecs = kotlin.math.abs(timerSecs)
+    val tMins = (absSecs % 3600) / 60
+    val tSecs = absSecs % 60
+    val formattedTimerStr = String.format(java.util.Locale.US, "%s%02d:%02d", if (isTimerOvertime) "+" else "", tMins, tSecs)
+    val timerBadgeColor = when {
+        isTimerOvertime -> Color(0xFFDC2626)
+        timerSecs <= 300 -> Color(0xFFD97706)
+        presentationState.sermonTimerRunning -> Color(0xFF059669)
+        else -> Color(0xFF27272A)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(BgTopBar)
     ) {
-        // Status Bar Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.altari_digital_icon_1787294223180),
-                    contentDescription = "Altari Digital Logo",
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(Emerald, CircleShape)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "ALTARI DIGITAL",
-                            color = TextMain,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
+        if (isCompactScreen) {
+            // COMPACT ROW 1: Branding & Playlist Selector + Remote shortcut
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.app_logo),
+                        contentDescription = "Altari Digital Logo",
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .background(Emerald, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "LIVE WEB DISPLAY: http://$localIp:$port",
-                        color = EmeraldLight,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold
+                        text = "ALTARI DIGITAL",
+                        color = TextMain,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.5.sp
                     )
                 }
-            }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Ticker Quick Action Pill
-                Surface(
-                    color = if (presentationState.isTickerVisible) Color(0xFFDC2626) else Color(0xFF27272A),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.clickable { showTickerDialog = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = if (presentationState.isTickerVisible) "🏃 Ticker ON" else "🏃 Ticker OFF",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Active Playlist Dropdown Pill
+                    Box {
+                        Surface(
+                            color = Color(0xFF381E72),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.clickable { dropdownExpanded = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Text(
+                                    text = "📋 ${activePlaylist?.name ?: "PLAYLIST"}",
+                                    color = Color.White,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text("▾", color = Color(0xFFD0BCFF), fontSize = 10.sp)
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.background(Color(0xFF25232A))
+                        ) {
+                            playlists.forEach { pl ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = pl.name,
+                                            color = if (pl.id == activePlaylistId) Color(0xFFD0BCFF) else Color.White,
+                                            fontWeight = if (pl.id == activePlaylistId) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    onClick = {
+                                        onSelectActivePlaylist(pl.id)
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                            HorizontalDivider(color = Color(0xFF49454F))
+                            DropdownMenuItem(
+                                text = {
+                                    Text("⚙️ Kelola Semua Playlist...", color = Color(0xFFD0BCFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                },
+                                onClick = {
+                                    onTabSelected(NavigationTab.PLAYLIST)
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
                     }
-                }
 
-                // Sermon Timer Quick Action Pill
-                val timerSecs = presentationState.sermonTimerRemainingSeconds
-                val isTimerOvertime = timerSecs < 0
-                val absSecs = kotlin.math.abs(timerSecs)
-                val tMins = (absSecs % 3600) / 60
-                val tSecs = absSecs % 60
-                val formattedTimerStr = String.format(java.util.Locale.US, "%s%02d:%02d", if (isTimerOvertime) "+" else "", tMins, tSecs)
-                val timerBadgeColor = when {
-                    isTimerOvertime -> Color(0xFFDC2626)
-                    timerSecs <= 300 -> Color(0xFFD97706)
-                    presentationState.sermonTimerRunning -> Color(0xFF059669)
-                    else -> Color(0xFF27272A)
-                }
-
-                Surface(
-                    color = timerBadgeColor,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.clickable { onTabSelected(NavigationTab.STAGE) }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = if (presentationState.sermonTimerRunning) "⏱️ $formattedTimerStr" else "⏸️ $formattedTimerStr",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                // Split Screen Quick Toggle Pill
-                Surface(
-                    color = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF27272A),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.clickable { server.toggleSplitScreen() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = if (presentationState.isSplitScreenEnabled) "🔲 Split ON (${presentationState.splitRatioCamPercent}:${100 - presentationState.splitRatioCamPercent})" else "🔲 Split OFF",
-                            color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                // Web Remote Quick Action Pill
-                Surface(
-                    color = Color(0xFF0D9488),
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.clickable { showWebRemoteDialog = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    // Web Remote Quick Pill
+                    Surface(
+                        color = Color(0xFF0D9488),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.clickable { showWebRemoteDialog = true }
                     ) {
                         Text(
                             text = "📱 Remote",
                             color = Color.White,
                             fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            // COMPACT ROW 2: Horizontal Scrollable Status Pills
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Ticker Quick Action Pill
+                Surface(
+                    color = if (presentationState.isTickerVisible) Color(0xFFDC2626) else Color(0xFF27272A),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.clickable { showTickerDialog = true }
+                ) {
+                    Text(
+                        text = if (presentationState.isTickerVisible) "🏃 Ticker ON" else "🏃 Ticker OFF",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                // Sermon Timer Quick Action Pill
+                Surface(
+                    color = timerBadgeColor,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.clickable { onTabSelected(NavigationTab.STAGE) }
+                ) {
+                    Text(
+                        text = if (presentationState.sermonTimerRunning) "⏱️ $formattedTimerStr" else "⏸️ $formattedTimerStr",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                // Split Screen Quick Toggle Pill
+                Surface(
+                    color = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF27272A),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.clickable { server.toggleSplitScreen() }
+                ) {
+                    Text(
+                        text = if (presentationState.isSplitScreenEnabled) "🔲 Split ON (${presentationState.splitRatioCamPercent}:${100 - presentationState.splitRatioCamPercent})" else "🔲 Split OFF",
+                        color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+
+                // Web URL badge
+                Surface(
+                    color = Color(0xFF1E293B),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Text(
+                        text = "🌐 http://$localIp:$port",
+                        color = EmeraldLight,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        } else {
+            // WIDE SCREEN ROW: All elements side-by-side
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.app_logo),
+                        contentDescription = "Altari Digital Logo",
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(Emerald, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "ALTARI DIGITAL",
+                                color = TextMain,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "LIVE WEB DISPLAY: http://$localIp:$port",
+                            color = EmeraldLight,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-                Box {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Ticker Quick Action Pill
                     Surface(
-                        color = Color(0xFF381E72),
+                        color = if (presentationState.isTickerVisible) Color(0xFFDC2626) else Color(0xFF27272A),
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.clickable { dropdownExpanded = true }
+                        modifier = Modifier.clickable { showTickerDialog = true }
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "📋 ${activePlaylist?.name ?: "PLAYLIST"}",
+                                text = if (presentationState.isTickerVisible) "🏃 Ticker ON" else "🏃 Ticker OFF",
                                 color = Color.White,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text("▾", color = Color(0xFFD0BCFF), fontSize = 11.sp)
                         }
                     }
 
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false },
-                        modifier = Modifier.background(Color(0xFF25232A))
+                    // Sermon Timer Quick Action Pill
+                    Surface(
+                        color = timerBadgeColor,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.clickable { onTabSelected(NavigationTab.STAGE) }
                     ) {
-                    playlists.forEach { pl ->
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    text = pl.name,
-                                    color = if (pl.id == activePlaylistId) Color(0xFFD0BCFF) else Color.White,
-                                    fontWeight = if (pl.id == activePlaylistId) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 12.sp
-                                )
-                            },
-                            onClick = {
-                                onSelectActivePlaylist(pl.id)
-                                dropdownExpanded = false
-                            }
-                        )
-                    }
-                    HorizontalDivider(color = Color(0xFF49454F))
-                    DropdownMenuItem(
-                        text = {
-                            Text("⚙️ Kelola Semua Playlist...", color = Color(0xFFD0BCFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        },
-                        onClick = {
-                            onTabSelected(NavigationTab.PLAYLIST)
-                            dropdownExpanded = false
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (presentationState.sermonTimerRunning) "⏱️ $formattedTimerStr" else "⏸️ $formattedTimerStr",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
-                    )
+                    }
+
+                    // Split Screen Quick Toggle Pill
+                    Surface(
+                        color = if (presentationState.isSplitScreenEnabled) Color(0xFF7C3AED) else Color(0xFF27272A),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.clickable { server.toggleSplitScreen() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (presentationState.isSplitScreenEnabled) "🔲 Split ON (${presentationState.splitRatioCamPercent}:${100 - presentationState.splitRatioCamPercent})" else "🔲 Split OFF",
+                                color = if (presentationState.isSplitScreenEnabled) Color(0xFFD0BCFF) else Color.LightGray,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    // Web Remote Quick Action Pill
+                    Surface(
+                        color = Color(0xFF0D9488),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.clickable { showWebRemoteDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "📱 Remote",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Box {
+                        Surface(
+                            color = Color(0xFF381E72),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.clickable { dropdownExpanded = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "📋 ${activePlaylist?.name ?: "PLAYLIST"}",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text("▾", color = Color(0xFFD0BCFF), fontSize = 11.sp)
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false },
+                            modifier = Modifier.background(Color(0xFF25232A))
+                        ) {
+                            playlists.forEach { pl ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = pl.name,
+                                            color = if (pl.id == activePlaylistId) Color(0xFFD0BCFF) else Color.White,
+                                            fontWeight = if (pl.id == activePlaylistId) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    onClick = {
+                                        onSelectActivePlaylist(pl.id)
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
+                            HorizontalDivider(color = Color(0xFF49454F))
+                            DropdownMenuItem(
+                                text = {
+                                    Text("⚙️ Kelola Semua Playlist...", color = Color(0xFFD0BCFF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                },
+                                onClick = {
+                                    onTabSelected(NavigationTab.PLAYLIST)
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
 
         // Scrollable Navigation Bar (Zero Overlap!)
         ScrollableTabRow(
@@ -816,20 +1001,28 @@ fun LandscapeOperatorConsole(
 
     var consoleLeftTab by remember { mutableIntStateOf(0) } // 0: Order, 1: Media/BG, 2: Songs
 
-    Row(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // PANEL 1: LEFT SIDE - Service Order & Media Picker
-        Card(
-            colors = CardDefaults.cardColors(containerColor = BgPanel),
-            shape = RoundedCornerShape(8.dp),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val totalWidth = maxWidth
+        val totalHeight = maxHeight
+        val isCompactLandscape = totalWidth < 900.dp
+        val leftPanelWidth = if (isCompactLandscape) (totalWidth * 0.28f).coerceIn(180.dp, 240.dp) else 280.dp
+        val rightPanelWidth = if (isCompactLandscape) (totalWidth * 0.32f).coerceIn(210.dp, 280.dp) else 300.dp
+        val monitorHeight = if (totalHeight < 400.dp) 78.dp else if (totalHeight < 520.dp) 96.dp else 115.dp
+
+        Row(
             modifier = Modifier
-                .width(280.dp)
-                .fillMaxHeight()
+                .fillMaxSize()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // PANEL 1: LEFT SIDE - Service Order & Media Picker
+            Card(
+                colors = CardDefaults.cardColors(containerColor = BgPanel),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .width(leftPanelWidth)
+                    .fillMaxHeight()
+            ) {
             Column(modifier = Modifier.padding(8.dp)) {
                 // Segmented Tab Selector for Panel 1
                 Row(
@@ -1563,92 +1756,96 @@ fun LandscapeOperatorConsole(
         }
 
         // PANEL 3: RIGHT SIDE - Dual Output Monitors & Action Center
-        Column(
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
             modifier = Modifier
-                .width(300.dp)
-                .fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .width(rightPanelWidth)
+                .fillMaxHeight()
         ) {
-            // PREVIEW MONITOR
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .background(Color.Black, RoundedCornerShape(8.dp))
-                    .border(1.dp, Primary, RoundedCornerShape(8.dp))
-                    .clip(RoundedCornerShape(8.dp))
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val previewState = presentationState.copy(
-                    backgroundType = when (previewContent) {
-                        is IpCameraContent -> BackgroundType.IP_CAMERA
-                        is CameraContent -> BackgroundType.CAMERA
-                        is VideoContent -> BackgroundType.VIDEO
-                        is ImageContent -> BackgroundType.IMAGE
-                        else -> BackgroundType.NONE
-                    },
-                    backgroundVideoUri = (previewContent as? IpCameraContent)?.streamUrl ?: (previewContent as? VideoContent)?.uri,
-                    backgroundImageUri = (previewContent as? ImageContent)?.uri,
-                    currentContent = previewContent,
-                    currentSlideIndex = previewSlideIndex,
-                    isSplitScreenEnabled = false
-                )
-                com.example.features.display.PresentationFrameRenderer(state = previewState)
-                
+                // PREVIEW MONITOR
                 Box(
                     modifier = Modifier
-                        .padding(6.dp)
-                        .background(PrimaryDark, RoundedCornerShape(3.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .fillMaxWidth()
+                        .height(monitorHeight)
+                        .background(Color.Black, RoundedCornerShape(8.dp))
+                        .border(1.dp, Primary, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
                 ) {
-                    Text("PREVIEW", color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    val previewState = presentationState.copy(
+                        backgroundType = when (previewContent) {
+                            is IpCameraContent -> BackgroundType.IP_CAMERA
+                            is CameraContent -> BackgroundType.CAMERA
+                            is VideoContent -> BackgroundType.VIDEO
+                            is ImageContent -> BackgroundType.IMAGE
+                            else -> BackgroundType.NONE
+                        },
+                        backgroundVideoUri = (previewContent as? IpCameraContent)?.streamUrl ?: (previewContent as? VideoContent)?.uri,
+                        backgroundImageUri = (previewContent as? ImageContent)?.uri,
+                        currentContent = previewContent,
+                        currentSlideIndex = previewSlideIndex,
+                        isSplitScreenEnabled = false
+                    )
+                    com.example.features.display.PresentationFrameRenderer(state = previewState)
+                    
+                    Box(
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .background(PrimaryDark, RoundedCornerShape(3.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("PREVIEW", color = Primary, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
-            }
 
-            // PROGRAM LIVE MONITOR
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .background(Color.Black, RoundedCornerShape(8.dp))
-                    .border(2.dp, Emerald, RoundedCornerShape(8.dp))
-                    .clip(RoundedCornerShape(8.dp))
-            ) {
-                PresentationFrameRenderer(state = presentationState)
+                // PROGRAM LIVE MONITOR
                 Box(
                     modifier = Modifier
-                        .padding(6.dp)
-                        .background(Emerald, RoundedCornerShape(3.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .fillMaxWidth()
+                        .height(monitorHeight)
+                        .background(Color.Black, RoundedCornerShape(8.dp))
+                        .border(2.dp, Emerald, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
                 ) {
-                    Text("PROGRAM (LIVE)", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    PresentationFrameRenderer(state = presentationState)
+                    Box(
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .background(Emerald, RoundedCornerShape(3.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("PROGRAM (LIVE)", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
-            }
 
-            // ACTION CENTER (Spacious, Un-cluttered Buttons)
-            Card(
-                colors = CardDefaults.cardColors(containerColor = BgPanel),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                // ACTION CENTER (Spacious, Un-cluttered Buttons)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = BgPanel),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Big Prominent GO LIVE Button
-                    Button(
-                        onClick = onGoLive,
-                        colors = ButtonDefaults.buttonColors(containerColor = Emerald),
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
-                        shape = RoundedCornerShape(8.dp)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text("GO LIVE ▶", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                    }
+                        // Big Prominent GO LIVE Button
+                        Button(
+                            onClick = onGoLive,
+                            colors = ButtonDefaults.buttonColors(containerColor = Emerald),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(if (totalHeight < 420.dp) 40.dp else 50.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("GO LIVE ▶", color = Color.White, fontSize = if (totalHeight < 420.dp) 14.sp else 16.sp, fontWeight = FontWeight.Black)
+                        }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1777,6 +1974,8 @@ fun LandscapeOperatorConsole(
         }
     }
 }
+}
+}
 
 /**
  * Modern Clean Portrait Operator Console
@@ -1803,6 +2002,9 @@ fun PortraitOperatorConsole(
     var workspaceTab by remember { mutableIntStateOf(0) } // 0: Order, 1: Songs, 2: Media/BG
     var songSearchQuery by remember { mutableStateOf("") }
 
+    val screenHeight = LocalConfiguration.current.screenHeightDp
+    val monitorHeight = if (screenHeight < 720) 105.dp else 130.dp
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1822,7 +2024,7 @@ fun PortraitOperatorConsole(
                 border = BorderStroke(1.5.dp, Primary.copy(alpha = 0.6f)),
                 modifier = Modifier
                     .weight(1f)
-                    .height(130.dp)
+                    .height(monitorHeight)
             ) {
                 Column(
                     modifier = Modifier
@@ -1893,7 +2095,7 @@ fun PortraitOperatorConsole(
                 border = BorderStroke(2.dp, Emerald),
                 modifier = Modifier
                     .weight(1f)
-                    .height(130.dp)
+                    .height(monitorHeight)
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     PresentationFrameRenderer(state = presentationState)
